@@ -1,0 +1,177 @@
+---
+title: "STATS 762 Week 11"
+author: " "
+date: "May 29, 2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preparation
+
+First I loaded required packages and lock random numbers.
+
+```{r}
+library(rpart); library(rpart.plot); library(rattle); library(gbm)
+
+#Setup random numbers
+set.seed(1e5)
+```
+
+#Heart disease data
+#Read the heart.csv file and prepare the dataset.
+```{r}
+#Read heart.csv data and change some numeric variables to nominal variables
+heart=read.csv(file='heart.csv',header=TRUE)
+heart$cp=as.factor(heart$cp);
+heart$fbs=as.factor(heart$fbs); heart$exang=as.factor(heart$exang)
+heart$sex=as.factor(heart$sex); heart$target=as.factor(heart$target);
+
+```
+#Classification tree
+
+```{r}
+#Fit a classifcation tree
+#slide 33-34
+heart.cart0 <- rpart(target~., data=heart,method='class',cp=0.001)
+heart.cart0$cptable
+
+#Prune the tree with a particular complexity paramter (cp)
+#slide 36
+heart.prune0 <-prune(heart.cart0,cp=heart.cart0$cptable[5,1])
+fancyRpartPlot(heart.prune0, uniform=TRUE,main=" ")
+
+#slide 35
+heart.prune0.full <-prune(heart.cart0,cp=heart.cart0$cptable[6,1])
+fancyRpartPlot(heart.prune0.full, uniform=TRUE,main=" ")
+
+#Predict classes and make confusion matrices
+#slide 37
+heart.pred0 <- predict(heart.prune0,newdata=heart[,-13],type='class')
+heart.pred0.full <- predict(heart.prune0.full,newdata=heart[,-13],type='class')
+table(heart.pred0,heart$target)
+table(heart.pred0.full,heart$target)
+
+#Relative variable importance
+#slide 38
+heart.cart0$variable.importance/sum(heart.cart0$variable.importance)
+
+```
+#Ozone data
+```{r}
+ozone=read.csv(file='Ozone35.csv',header=TRUE)
+```
+#Regression tree
+```{r}
+#Fit a regression tree with the default cp=0.01
+#slide 40
+ozone.cart0 <- rpart(y~. , data=ozone,method='anova')
+ozone.cart0$cptable
+
+#Fit a regression tree with cp=0.001
+#slide 41
+ozone.cart <- rpart(y~. , data=ozone,method='anova',cp=0.001)
+ozone.cart$cptable
+
+#Prune trees
+#Slide 42
+ozone.opt=prune(ozone.cart,cp=ozone.cart$cptable[6,1])
+fancyRpartPlot(ozone.opt, uniform=TRUE,main="Pruned Regression Tree")
+ozone.opt
+
+#Slide 45
+ozone.full=prune(ozone.cart,cp=ozone.cart$cptable[13,1])
+fancyRpartPlot(ozone.full, uniform=TRUE,main="Pruned Regression Tree")
+ozone.full
+
+#Predic values and find the MSE
+#slide 44
+ozone.opt.pred <- predict(ozone.opt,newdata=ozone[,-1],type='vector')
+opt.res=ozone.opt.pred-ozone$y; 
+
+par(mfrow=c(1,2)); plot(ozone$y,opt.res,xlab='observation',ylab='residual'); qqnorm(opt.res/sd(opt.res))
+
+ozone.full.pred <- predict(ozone.full,newdata=ozone[,-1],type='vector')
+full.res=ozone.full.pred-ozone$y;
+
+par(mfrow=c(1,2)); plot(ozone$y,full.res,xlab='observation',ylab='residual'); qqnorm(full.res/sd(full.res))
+
+mean(opt.res^2)
+mean(full.res^2)
+
+#Slide 45
+ozone.cart$variable.importance/sum(ozone.cart$variable.importance)
+```
+
+#Gradient boosting tree
+```{r}
+#Fit a boosting reg tree
+#slide 58
+ozone.gbm <- gbm(y ~., data = ozone, distribution='gaussian',shrinkage = 0.1, n.trees = 1000, cv.folds = 10)
+ozone.gbm.perf = gbm.perf(ozone.gbm, method = "cv")
+
+#prediction with the opt number of trees
+ozone.gbm.pred <- predict(ozone.gbm,newdata = ozone[,-1],n.trees = ozone.gbm.perf,type = "response")
+
+#mse
+ozone.res=ozone.gbm.pred-ozone$y;
+mean(ozone.res^2)
+qqnorm(ozone.res/sd(ozone.res))
+
+#reltive variable importance
+ozone.gbm.summary <- summary.gbm(ozone.gbm)
+```
+
+#Bicycle rent data
+Ths spreadsheet bike.csv contains bike rentals from 2011 to 2012 in Washington, D.C. The goal is to what influenced people renting bikes over the course of the year
+
+(a) Read the spreadsheet, BikeSHaring.csv. The four varialbes should be read as nominal variables and they are season, weekday, workingday and weathersit. 
+
+```{r}
+
+bike=read.csv(file='BikeSharing.csv',header=TRUE)
+bike$season=as.factor(bike$season); bike$holiday=as.factor(bike$holiday); 
+bike$weekday=as.factor(bike$weekday); bike$workingday=as.factor(bike$workingday); 
+bike$weathersit=as.factor(bike$weathersit); 
+```
+
+(b) Using the defult specification, fit a regression tree. Find the optimal tree using the 1se rule and the tree minimizing cv error. Note that the count variable (response data) is a count data and we fit a poisson regression tree.
+
+```{r}
+bike.cart <- rpart(cnt~. , data=bike,method='poisson',cp=0.01)
+bike.cart$cptable
+
+bike.prune <- prune(bike.cart,cp=bike.cart$cptable[5,1])
+bike.prune.full <- prune(bike.cart,cp=bike.cart$cptable[8,1])
+fancyRpartPlot(bike.prune,main='optimal tree')
+#Or you may use rpart.plot function 
+rpart.plot(bike.prune,main='optimal tree')
+```
+
+(c) Compare the predictibility of the optial tree and the tree minizing cv error using the mean absolute error. 
+
+```{r}
+bike.prune.pred <- predict(bike.prune,newdata=bike[,-9],type='vector')
+bike.prune.full.pred <- predict(bike.prune.full,newdata=bike[,-9],type='vector')
+
+mean(abs(bike.prune.pred-bike$cnt))
+mean(abs(bike.prune.full.pred-bike$cnt))
+```
+
+(d) Find the boosted regression tree and fine the mean absolute error. 
+
+```{r}
+bike.gbm <- gbm(log(cnt) ~., data = bike, distribution='gaussian',shrinkage = 0.1,n.trees = 1000, cv.folds = 10)
+bike.gbm.perf = gbm.perf(bike.gbm, method = "cv")
+bike.gbm.perf
+
+bike.gbm.pred <- predict(bike.gbm,newdata = bike[,-9],n.trees =bike.gbm.perf,type = "response")
+bike.res=exp(bike.gbm.pred)-bike$cnt;
+mean(abs(bike.res))
+
+```

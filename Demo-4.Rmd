@@ -1,0 +1,151 @@
+---
+title: "STATS 762 Week 9"
+author: " "
+date: "May 15, 2019"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+
+First I loaded required packages and load datasets.
+
+```{r}
+library(glmnet); #Ridge and Lasso  
+library(grpreg); #Group lasso
+ozone=read.csv(file='Ozone35.csv',header=TRUE); 
+ozone=as.matrix(ozone); #put in a matrix format - Design matrix should be read as a matrix for glmnet
+binary=read.csv(file='binary.csv',header=TRUE);
+binary=as.matrix(binary); 
+data(Birthwt) #dataset in grpreg
+```
+
+# Ridge regression
+
+```{r}
+#Slide 13
+ridge.lam1=glmnet(ozone[,-1],ozone[,1],alpha=0,lambda=1,standardize=TRUE)
+#Slide 15
+ridge.fit=glmnet(ozone[,-1],ozone[,1],alpha=0,standardize=TRUE)
+plot(ridge.fit)
+
+```
+
+# Lasso regression
+```{r}
+#Slide 21
+lasso.lam1=glmnet(ozone[,-1],ozone[,1],alpha=1,lambda=1,standardize=TRUE)
+#Slide 23
+lasso.fit=glmnet(ozone[,-1],ozone[,1],alpha=1,standardize=TRUE) 
+plot(lasso.fit)
+```
+
+#Optimal lambda using CV 
+##Ridge regression 
+```{r}
+#Slide 30 and 31
+cv.ridge=cv.glmnet(as.matrix(ozone[,-1]),as.matrix(ozone[,1]),alpha=0,standardize=TRUE)
+plot(cv.ridge)
+#lambda minimizing the cv error
+cv.ridge$lambda.min
+#Min cv error
+cv.ridge$cvm[cv.ridge$lambda==cv.ridge$lambda.min]
+#lambda 1sd - cv error is off by 1sd of the min error
+cv.ridge$lambda.1se
+#cv error off by 1sd of the min er
+cv.ridge$cvm[cv.ridge$lambda==cv.ridge$lambda.1se]
+#Coefficients when lambda.1se
+coef(cv.ridge,s=cv.ridge$lambda.1se)
+```
+##Lasso regression 
+```{r}
+#Slide 30 and 31
+cv.lasso=cv.glmnet(as.matrix(ozone[,-1]),as.matrix(ozone[,1]),alpha=1,standardize=TRUE)
+plot(cv.lasso)
+#lambda minimizing the cv error
+cv.lasso$lambda.min
+#Min cv error
+cv.lasso$cvm[cv.lasso$lambda==cv.lasso$lambda.min]
+#lambda 1sd - cv error is off by 1sd of the min error
+cv.lasso$lambda.1se
+#cv error off by 1sd of the min er
+cv.lasso$cvm[cv.lasso$lambda==cv.lasso$lambda.1se]
+#Coefficients when lambda.1se
+coef(cv.lasso,s=cv.lasso$lambda.1se)
+```
+
+#Elastic net 
+```{r}
+#Slides 35 and 36
+#alpha=0.2
+elastic.fit=glmnet(ozone[,-1],ozone[,1],alpha=0.2,standardize=TRUE)
+plot(elastic.fit)
+cv.elastic=cv.glmnet(as.matrix(ozone[,-1]),as.matrix(ozone[,1]),alpha=0.2,standardize=TRUE)
+plot(cv.elastic)
+```
+
+#Logistic reg - Graduate school data
+```{r}
+#Slide 42
+binary.fit=glmnet(binary[,-1],binary[,1],family='binomial',alpha=1,standardize=TRUE)
+plot(binary.fit)
+binary.lasso=cv.glmnet(binary[,-1],binary[,1],family='binomial',alpha=1,standardize=TRUE)
+plot(binary.lasso)
+#optimal lambda
+binary.lasso$lambda.1se
+#coefficients when lambda.1se
+coef(binary.lasso,s=binary.lasso$lambda.1se)
+
+```
+
+#Group lasso
+```{r}
+#Slide 51
+Birthwt.fit <- grpreg(Birthwt$X, Birthwt$bwt, Birthwt$group, family='gaussian',penalty="grLasso")
+plot(Birthwt.fit)
+
+#Slide 53
+#prediction
+predict(Birthwt.fit,Birthwt$X,type='response',lambda=0.1)[1:10]
+predict(Birthwt.fit,Birthwt$X,type='group',lambda=0.1)
+predict(Birthwt.fit,Birthwt$X,type='coefficients',lambda=0.1)[1:10]
+
+#Slide 54
+plot(Birthwt$bwt,predict(Birthwt.fit,Birthwt$X,type='response',lambda=0.1),xlim=c(0.5,5.5),ylim=c(0.5,5.5))
+
+#Slide 56
+cvfit <- cv.grpreg(Birthwt$X, Birthwt$bwt, Birthwt$group, family='gaussian', penalty="grLasso")
+coef(cvfit,s=cvfit$lambda.1se)
+
+#Slide 57
+plot(Birthwt$bwt,predict(cvfit,Birthwt$X,type='response',lambda=cvfit$lambda.min)
+                         ,xlim=c(0.5,5.5),ylim=c(0.5,5.5))
+
+```
+
+
+#Exercise 
+
+Data (evap.txt) was recorded for factors affecting the evaporation water
+from a location in Texas. The first column "evap"" is a response variable. See Arden's Lecture slides 7 for details. 
+
+```{r}
+evap=read.delim('evap.txt',sep="",header=TRUE)
+```
+
+(a) Find the optimal subset of covariates to predict the amount of evaporation from soil.
+```{r}
+```
+(b) Find the coefficients for your model in (a).
+```{r}
+```
+(c) Plot the actual data against prediction using your model in (a).
+```{r}
+```
+

@@ -1,0 +1,239 @@
+---
+title: "STATS 762 Week 8"
+author: " "
+date: "May 8, 2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+First I loaded required packages and load datasets.
+```{r}
+require(stats); require(graphics); require(MASS)
+```
+Slide 4 - Load cherry.csv and do pair plots.
+
+```{r}
+cherry <- read.csv(file="cherry.csv", header=TRUE, sep=",")
+pairs(cherry, panel = panel.smooth, main = "trees data")
+pairs(log(cherry), panel = panel.smooth, main = "trees data")
+
+```
+
+Slide 11
+```{r}
+mod1 <- glm(cherry$Volume ~ cherry$Girth, family = gaussian)
+summary(mod1)
+plot(cherry$Girth,cherry$Volume,main='model 1',xlab='Girth',ylab='Volume');  
+lines(cherry$Girth,predict(mod1)); legend("bottomright",c("log-Like=-87.82236 (df=3)","AIC=181.64470","BIC=185.9467"))
+legend(9,45,c("Volume=-36.9435+5.0659*Girth"))
+
+logLik(mod1) #log-likelihood
+AIC(mod1) #AIC
+BIC(mod1) #BIC
+
+mod2 <- glm(log(cherry$Volume) ~ log(cherry$Girth), family = gaussian)
+summary(mod2)
+plot(log(cherry$Girth),log(cherry$Volume),main='model 2',xlab='log(Girth)',ylab='log(Volume)');  
+lines(log(cherry$Girth),predict(mod2)); legend("bottomright",c("log-Like=24.10551 (df=3)","AIC=-42.21102","BIC=-37.90906"))
+legend(2.1,3.7,c("log(Volume)=-2.35332+2.19997*log(Girth)"))
+
+logLik(mod2) #log-likelihood
+AIC(mod2) #AIC
+BIC(mod2) #BIC
+
+plot(cherry$Girth,cherry$Volume,main='model 2',xlab='Girth',ylab='Volume');
+lines((cherry$Girth),exp(predict(mod2)));
+
+mod3 <- glm(log(cherry$Volume) ~ log(cherry$Girth^2*cherry$Height), family = gaussian)
+logLik(mod3) #log-likelihood
+AIC(mod3) #AIC
+BIC(mod3) #BIC
+```
+Slide 13
+```{r}
+plot(log(cherry$Girth^2*cherry$Height),log(cherry$Volume),main='model 3',xlab=expression(log(Girth^2*Height)),ylab='log(Volume)');  
+lines(log(cherry$Girth^2*cherry$Height),predict(mod3)); legend("bottomright",c("log-Like=35.18589 (df=3)","AIC=-64.37179","BIC=-60.06983"))
+legend(8.5,4,c("log(Volume)=-1.17294+0.53004*log(Girth*Girth*Height)"))
+dev.new(); plot(trees$Girth^2*trees$Height,trees$Volume ,main='model 3',xlab=expression(Girth^2*Height),ylab='Volume');
+lines(cherry$Girth^2*cherry$Height,exp(predict(mod3)));
+
+```
+
+Cross validation
+
+Load Auto.csv and impelment the k-folder cv (leave one out CV)
+
+Slide 27
+```{r}
+set.seed(1e4)
+Auto <- read.csv(file="Auto.csv", header=TRUE, sep=",")
+str(Auto)
+Auto=Auto[,-9]; d=dim(Auto) #dimension of Auto
+Auto=Auto[sample(d[1],d[1],replace=FALSE),] #randomly arrange entries 
+K=8; # number of partitions
+# K=d[1] #leave one out cv
+sk=rep(c(1:K),ceiling(d[1]/K)); sk=sk[1:d[1]];
+err=matrix(0,K,3)
+for(k in 1:K){
+  f=glm(log(mpg) ~ log(weight)+log(horsepower), data = Auto[-which(sk==k),], family = gaussian)
+  y=predict(f, newdata=Auto[which(sk==k),])
+  #absolute error loss
+  err[k,1]=mean(abs(log(Auto$mpg[which(sk==k)])-y))
+  #squared error loss
+  err[k,2]=mean((log(Auto$mpg[which(sk==k)])-y)^2) 
+  #-2log.like loss
+  err[k,3]=mean(-2*dnorm(log(Auto$mpg[which(sk==k)]),y,sd(f$residuals),log=T)) 
+}
+colnames(err)=c('absolute','squared','-2log-like'); 
+rownames(err)=paste('partition',c(1:K))
+print(err)
+#CV predictive error
+colMeans(err)
+```
+Slide 34
+```{r}
+K=10; #number of partitions
+sk=rep(c(1:K),ceiling(d[1]/K)); sk=sk[1:d[1]];
+LAM=c(0.1,c(1:9)); err=matrix(0,length(LAM),3); colnames(err)=c('absolute','squared','-2log-like')
+for(j in 1:length(LAM)){
+for(k in 1:K){
+   f=stepAIC(glm(mpg ~ displacement+horsepower+weight+acceleration+horsepower*acceleration,data = log(Auto[-which(sk==k),]), family = gaussian),k=LAM[j],trace=FALSE)
+  y=predict(f, newdata=log(Auto[which(sk==k),]))
+  
+  err[j,1]=err[j,1]+mean(abs(log(Auto$mpg[which(sk==k)])-y)) #absolute error loss
+  err[j,2]=err[j,2]+mean((log(Auto$mpg[which(sk==k)])-y)^2) #squared error loss
+  err[j,3]=err[j,3]+mean(-2*dnorm(log(Auto$mpg[which(sk==k)]),y,sd(f$residuals),log=T)) #-2*log-likelihood error loss
+} }
+err = err/K
+
+par(mfrow=c(1,3))
+plot(LAM,err[,1],ylab='CV predictive error, absolue error loss', xlab='penalty multiplier')
+plot(LAM,err[,2],ylab='CV predictive error, squared error loss', xlab='penalty multiplier')
+plot(LAM,err[,3],ylab='CV predictive error, -2log.likelihood loss', xlab='penalty multiplier')
+
+
+```
+
+We check what models minimizing the CV predictive error
+
+```{r}
+loss.choice=2; min.err=min(err[,loss.choice])
+lam.hat = LAM[err[,loss.choice]==min.err]; 
+print(lam.hat) #lambda minimizing the CV predictive error
+lam=lam.hat[1]
+for(k in 1:K){
+  f=stepAIC(glm(mpg ~ displacement+horsepower+weight+acceleration+
+                  horsepower*acceleration,data = log(Auto[-which(sk==k),]), 
+                family = gaussian),k=lam,trace=FALSE)
+print(f$coefficients)
+}
+
+final=glm(mpg ~ displacement+horsepower+weight+acceleration,data=log(Auto), 
+          family = gaussian)
+mean(final$residuals^2) #MSE
+
+```
+Bootstrap
+
+Slide 47 - We load cherry.csv and fit a linear regression model. Display the MLE's, 
+
+```{r}
+cherry <- read.csv(file="cherry.csv", header=TRUE, sep=",")
+f0 <- glm(log(cherry$Volume) ~ log(cherry$Girth), family = gaussian)
+S0=summary(f0)$coefficients
+n=dim(cherry)[1]; 
+```
+
+We compute B(=1000) bootstrap samples and find some statistics (mean, bias, std, quantiles). 
+
+```{r}
+B=1e3; 
+Nindex=matrix(0,B,n); BootS=matrix(,B,length(f0$coefficients))
+
+for(b in 1:B){ J=sample(n,n,replace=T); Nindex[b,sort(unique(J))]=table(J) 
+f=glm(log(Volume) ~ log(Girth), data = cherry[J,], family = gaussian)
+BootS[b,]=f$coefficients
+}
+
+BootsResult=matrix(,2,5); 
+rownames(BootsResult)=c('intercept','Girth')
+colnames(BootsResult)=c('mean','bias','std','5%','95%')
+
+BootsResult[,1]=colMeans(BootS)
+BootsResult[,2]=colMeans(BootS)-S0[,1]
+BootsResult[,3]=apply(BootS,2,sd)
+BootsResult[,4]=apply(BootS,2,function(x) quantile(x,prob=0.05))
+BootsResult[,5]=apply(BootS,2,function(x) quantile(x,prob=0.95))
+```
+Slide 48 - Plot the frequency of each observation in B-bootstrap samples. 
+
+```{r}
+plot(colSums(Nindex),xlab='index',ylab='freq',main='Total number of occurance',cex.axis=1.5,cex.lab=1.5)
+
+```
+
+Slide 50 - Plot histograms of intercepts and coefficients for bootstrap samples and, display statistics of the distribution estimates for intercept and coefficient.
+
+```{r}
+par(mfrow=c(1,2)) 
+hist(BootS[,1],main='intercept',xlab='Intercept',ylab='Freq',cex.axis=1.5,cex.lab=1.5);abline(v=S0[1,1],col='red')
+hist(BootS[,2],main='Girth',xlab='Coefficient',ylab='Freq',cex.axis=1.5,cex.lab=1.5);abline(v=S0[2,1],col='red')
+```
+
+Lab quesiton : Mussels data contains qualities of 41 rivers and number of mussel types. The goal is to model the number of species with water qualities.
+
+(a) Find the linear regresssion model using all covaraites. 
+
+```{r}
+mussels <- read.delim("mussels1.dat",sep='')
+head(mussels)
+#poisson regression 
+fit.glm<-glm(species~.,family="poisson",data=mussels[,-1])
+summary(fit.glm)
+```
+(b) Find the predictive error using the leave one out cross validation when the loss function is (i) suqared error and (ii) -2log.likelihood. 
+
+```{r}
+set.seed(1e4)
+#LOOCV,squared error loss
+err=matrix(0,dim(mussels)[1],2); colnames(err)=c("squared err","-2log.like")
+for(i in 1:dim(mussels)[1]){ f<-glm(species~.,family="poisson",data=mussels[-i,-1])
+  err[i,1]=(mussels$species[i]-predict.glm(f,mussels[i,-1]))^2
+  err[i,2]=-2*dpois(mussels$species[i],exp(f$coefficients[1]+sum(f$coefficients[-1]*mussels[i,3:11])),log=T)
+}
+colMeans(err) #predictive error
+
+```
+
+(c) Find the distribution for intercept and coefficients of Poisson regression model. Plot the distribution for intercept and coefficients.
+
+```{r}
+B=3e3; n=dim(mussels)[1]; BootS=matrix(0,B,length(fit.glm$coefficients))
+b=0;
+while(b<B){ y.boot=mussels[sample(n,n,replace=TRUE),-1]
+f<-glm(species~.,family="poisson",data=y.boot)
+if(sum(is.na(f$coefficients))==0){b=b+1; BootS[b,]=f$coefficients }
+}
+
+#par(mfrow=c(5,2))
+for(i in 1:10){hist(BootS[,i],probability=TRUE,xlab=names(fit.glm$coefficients)[i],main=' ')}
+
+```
+(d) Find the 95% confidence interval of intercept and coefficient estimates in the Poisson regression model. Find which covariates are significant based on 95% CI. 
+
+The 95% CI for solre is strictly negative while all include 0.
+
+```{r}
+BootsResult=matrix(,length(fit.glm$coefficients),5); 
+rownames(BootsResult)=names(fit.glm$coefficients)
+colnames(BootsResult)=c('mean','bias','std','2.5%','97.5%')
+
+BootsResult[,1]=colMeans(BootS)
+BootsResult[,2]=colMeans(BootS)-fit.glm$coefficients
+BootsResult[,3]=apply(BootS,2,sd)
+BootsResult[,4]=apply(BootS,2,function(x) quantile(x,prob=0.025))
+BootsResult[,5]=apply(BootS,2,function(x) quantile(x,prob=0.975))
+```
+

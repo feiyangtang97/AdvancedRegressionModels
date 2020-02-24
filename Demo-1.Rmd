@@ -1,0 +1,97 @@
+---
+title: "STATS 762 Week 7"
+author: " "
+date: "1 May 2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+## Slide 13
+First I loaded quantreg-package and the data.
+```{r}
+library(quantreg)
+data(engel)
+```
+
+Find quantile regressions for q=(0.05, ..., 0.95).
+```{r}
+T=c(0.05,0.1,0.25,0.5,0.75,0.9,0.95)
+plot(foodexp ~ income, data = engel, main = "foodexp ~ income"
+                ,ylab="Food Expenditure",xlab='Household Income')
+abline(lm(foodexp ~ income, data = engel), col = 1)
+for(t in 1:length(T)){
+  abline(rq(foodexp ~ income, data = engel,tau=T[t]), col = t+1)
+}
+legend("topright", legend = c("lm", paste("rq,",as.character(T))), col = c(1:(length(T)+1)),lty = 1)
+
+```
+#Slide 15,17
+Create table of intercept and coefficient estimates.
+```{r}
+T=c(0.05,0.1,0.25,0.5,0.75,0.9,0.95)
+S0=S1=matrix(,length(T),3)
+for(t in 1:length(T)){
+  S0[t,]=summary(rq(foodexp ~ income, data = engel,tau=T[t]))$coefficients[1,]
+  S1[t,]=summary(rq(foodexp ~ income, data = engel,tau=T[t]))$coefficients[2,]
+}
+
+par(mfrow = c(1, 2)) 
+plot(T,S0[,1],type='l',ylim=c(min(S0),max(S0)),xlab='quantiles',ylab='intercept',
+     cex.axis=1.5,cex=1.5,cex.lab=1.5); 
+lines(T,S0[,2],col='blue'); lines(T,S0[,3],col='blue')
+plot(T,S1[,1],type='l',ylim=c(min(S1),max(S1)),xlab='quantiles',ylab='coefficient',
+     cex.axis=1.5,cex=1.5,cex.lab=1.5); 
+lines(T,S1[,2],col='blue'); lines(T,S1[,3],col='blue')
+
+```
+
+#Slide 19
+First I loaded LogisticDx-package to load the birth weight data. 
+```{r}
+library(LogisticDx)
+data(lbw)
+```
+#Slide 25
+```{r}
+T=c(1:9)/10; cmx=matrix(,length(T),6)
+for(t in 1:length(T)){ cmx[t, ] <- rq(BWT ~ LWT*RACE,data = lbw,tau=T[t])$coefficients
+print(paste(T[t],"-quantile"))
+print(rq(BWT ~ LWT*RACE,data = lbw,tau=T[t])$coefficients)
+}
+
+```
+#Slide 26
+```{r}
+par(mfrow = c(1,2))
+plot(T,cmx[,1],xlab='quantile',ylab='Intercept:Race',type='l',
+     col=1,ylim=c(min(cmx[,1])-15,max(cmx[,1])+5));
+lines(T,cmx[,1]+cmx[,3],col=2); lines(T,cmx[,1]+cmx[,4],col=3); 
+legend("topright", legend = c("White","Black","Other"), col = c(1:3),lty = 1)
+plot(T,cmx[,2],xlab='quantile',ylab='LWT:Race',type='l',col=1,ylim=c(min(cmx[,2])-15,max(cmx[,2])+5));
+lines(T,cmx[,2]+cmx[,5],col=2); lines(T,cmx[,2]+cmx[,6],col=3); 
+legend("topright", legend = c("White","Black","Other"), col = c(1:3),lty = 1)
+
+```
+#Slide 27
+```{r}
+x0=seq(from=70,to=260,length.out=200)
+par(mfrow = c(1,3))
+plot(lbw$LWT[lbw$RACE=='white'],lbw$BWT[lbw$RACE=='white'],main='RACE=white',
+     ylab='Birth weight (BWT)',xlab='Weight of mother(LWT)',xlim=c(70,260),
+     ylim=c(700,5e3));
+
+for(t in 1:length(T)){lines(x0,cmx[t,1]+cmx[t,2]*x0,col=t) }
+legend("topright", legend =T, col = c(1:t),lty = 1)
+plot(lbw$LWT[lbw$RACE=='black'],lbw$BWT[lbw$RACE=='black'],main='RACE=black',
+     ylab='Birth weight (BWT)',xlab='Weight of mother(LWT)',xlim=c(70,260),
+     ylim=c(700,5e3));
+for(t in 1:length(T)){lines(x0,(cmx[t,1]+cmx[t,3])+(cmx[t,2]+cmx[t,5])*x0,col=t) }
+legend("topright", legend =T, col = c(1:t),lty = 1)
+plot(lbw$LWT[lbw$RACE=='other'],lbw$BWT[lbw$RACE=='other'],main='RACE=other',
+     ylab='Birth weight (BWT)',xlab='Weight of mother(LWT)',xlim=c(70,260),ylim=c(700,5e3));
+for(t in 1:length(T)){lines(x0,(cmx[t,1]+cmx[t,4])+(cmx[t,2]+cmx[t,6])*x0,col=t) }
+legend("topright", legend =T, col = c(1:t),lty = 1)
+```

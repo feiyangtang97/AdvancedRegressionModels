@@ -1,0 +1,209 @@
+---
+title: "STATS 762 Week 9"
+author: " "
+date: "May 15, 2019"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+
+First I loaded required packages and load datasets.
+
+```{r}
+library(MASS) 
+library(klaR)
+library(nnet)
+library(reshape2)
+library(ggplot2)
+
+#Setup random numbers
+set.seed(1e4)
+
+```
+#Low birth weight
+### Logistic regression
+```{r}
+#read the data and convert low as a nominal variable
+Birth=read.csv(file='Birthwt.csv',header=TRUE)
+Birth$low=as.factor(Birth$low) 
+
+#slides 6 and 7
+#Fit a logistic regression 
+Birth.logistic <- multinom(low ~ ., data = Birth)
+
+#predict class
+bp <- predict(Birth.logistic,newdata=Birth) 
+
+#coefficient estimates 
+coef(Birth.logistic)
+
+#confusion matrix
+table(bp,Birth$low)
+
+```
+
+# Iris data preparation
+```{r}
+#read iris data
+iris=read.csv(file='iris.csv', header = TRUE)
+n=dim(iris)[1]
+
+#a train data contains 120 randomly selected samples
+#train.iris is a list of indices of samples in the train data
+train.iris=sample(n,120,replace=FALSE)
+```
+### Multinomial regression 
+```{r}
+#slides 14-17
+#fit a multinomial regression for the train data
+iris.mn <- multinom(Species ~ ., data = iris,subset=train.iris)
+
+#class membership probabilities
+prob=fitted(iris.mn)
+print(prob[1:5,])
+
+#prediction for the test data 
+pp <- predict(iris.mn,newdata=iris[-train.iris,]) 
+
+#confusion matrix
+table(pp,iris$Species[-train.iris])
+```
+
+### LDA
+```{r}
+#slides 26-28
+#Fit the LDA for the test data
+lda.iris <- lda(Species ~ .,iris,subset=train.iris)
+
+#Plot boundaries
+partimat(Species ~ ., data=iris[train.iris,], method="lda")
+
+#prediction 
+lda.pred=predict(lda.iris,iris[-train.iris,])
+
+#print the class membership probability 
+lda.pred$posterior
+
+#confusion matrix
+table(lda.pred$class,iris$Species[-train.iris])
+
+```
+
+### QDA
+```{r}
+#slides 30-34
+#Fit the QDA for the train data
+qda.iris <- qda(Species ~ .,iris,subset=train.iris)
+
+#plot boundaries
+partimat(Species ~ ., data=iris[train.iris,], method="qda")
+
+#prediction 
+qda.pred=predict(qda.iris,iris[-train.iris,])
+
+#class membership probability 
+qda.pred$posterior 
+
+#confusion matrix
+table(qda.pred$class,iris$Species[-train.iris])
+```
+
+### Discriminant function 
+```{r}
+#slides 43-45
+#recall lda fit
+lda.iris <- lda(Species ~ .,iris,subset=train.iris)
+
+#plot projected samples
+plot(lda.iris, col = as.integer(iris$Species[train.iris]))
+
+#histogram of projected samples using DA1
+ldahist(lda.pred$x[,1],g=iris$Species[-train.iris])
+
+#histogram of projected samples using DA2
+ldahist(lda.pred$x[,2],g=iris$Species[-train.iris])
+
+```
+
+# Glass data
+```{r}
+#load the glass data
+glass=read.csv(file='glass.csv',header=TRUE);
+glass$Type=as.factor(glass$Type)
+```
+
+###Multinomial regression 
+```{r}
+#slides 55-56
+#Fit the multinomial regression 
+glass.mn <- multinom(Type ~ ., glass)
+
+#Prediction 
+glass.mnpredict <- predict(glass.mn,glass)
+
+#confusion matrix
+table(glass.mnpredict,glass$Type)
+```
+
+###LDA
+```{r}
+#slides 57-58
+#LDA
+glass.lda <- lda(Type~.,glass)
+
+#prediction 
+glass.ldapredict <- predict(glass.lda,glass)
+
+#projected samples
+plot(glass.lda, col = as.integer(glass$Type))
+
+#confusion matrix
+table(glass.ldapredict$class,glass$Type)
+```
+
+###QDA
+If you fit the QDA naively, you will get an error message that the number of samples for Type=6 is too small.
+We exclude samples for Type=6 and fit the QDA.
+```{r}
+#slides 59
+#glass.sub is the data excluding Type=6. 
+#reset the level. 
+glass.sub=glass[which(glass$Type!='6'),]; glass.sub$Type=factor(glass.sub$Type)
+
+#QDA
+glass.qda <- qda(Type~.,glass.sub)
+
+#Prediction 
+glass.qdapredict <- predict(glass.qda,glass.sub)
+
+#confusion matrix
+table(glass.qdapredict$class,glass.sub$Type)
+```
+
+###subset variables minimizing the AIc.
+```{r}
+glass.aic=stepAIC(glass.mn,k=2,trace=FALSE)
+glass.aic$anova
+
+glass.mn.aic <- multinom(Type ~ Na+Mg+Al+Si+K+Ba, glass)
+
+#Prediction 
+glass.mnpredict.aic <- predict(glass.mn.aic,glass)
+
+#confusion matrix
+table(glass.mnpredict.aic,glass$Type)
+```
+
+# Questions 
+1. We want to predict the green tea quality (levels 1-5). For each tea, 5 chemical contains are measured. Write how you will predict the tea quality given 5 chemical contains using multinomial regression, LDA and QDA.
+
+2. The spreadsheet binary.csv (see Week 9) contains postgraduate applications. If an applicant is accepted to the postgraduate programme, admit=1. Otherwise admit=0. We want to predict the postgraduate school entry given gre and gpa scores and, the rank of highschool. The train data contains 70% of samples and the test data contains the rest samples. Predict the admit state using (a) a logistic regression, (b) LDA and (c) QDA. Compare the predictivity of the three classification methods.
+
+

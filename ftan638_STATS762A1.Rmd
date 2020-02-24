@@ -1,0 +1,278 @@
+---
+title: "STAT 762 Assignment 1"
+author: 'Francis Tang UPI: ftan638'
+date: 'Due: 26 March 2019'
+output: pdf_document
+---
+Question 1
+
+(a) Create a data frame in R. Make sure that each column in your data frame has been specified as the appropriate class. Take an initial look at the data and comment on what you find.
+
+Here I convert the columns 'age', 'cad.dur', and 'choleste' into numerical values. And convert binary values 'tvdlm' and 'sex' into factors.
+
+```{r}
+# read data as a new dataframe from txt file
+acath.df <- read.csv("~/Desktop/STATS 762/acath.txt", sep="")
+str(acath.df)
+# convert three columns into numerical class
+acath.df$cad.dur <- as.numeric(acath.df$cad.dur)
+acath.df$choleste <- as.numeric(acath.df$choleste)
+acath.df$age <- as.numeric(acath.df$age)
+acath.df$sex <- as.factor(acath.df$sex)
+acath.df$tvdlm <- as.factor(acath.df$tvdlm)
+str(acath.df)
+```
+
+```{r}
+# get a summary of each column
+summary(acath.df)
+# get a paired plot
+pairs(acath.df, col = "cadetblue")
+```
+
+We got to know the mean, median and quatiles of the variables. And the paired plot gave us an rough overview of the relationships between these variables. There might be some correlations among age and cad.dur, choleste and cad.dur. We will analyse them deeper in the next questions.
+
+For the numeric variables we may want to look at some standard plots such as violin plots:
+
+```{r}
+library(lattice)
+library(violinmplot)
+violinmplot(acath.df$age,
+            main="Violin plot for age", xlab="Age")
+violinmplot(acath.df$cad.dur,
+            main="Violin plot for the length of time symptoms", 
+            xlab="Length of time symptoms")
+violinmplot(acath.df$choleste,
+            main="Violin plot for blood cholesterol level", 
+            xlab="blood cholesterol level")
+
+```
+
+The violin plots gave us a primary illustration of how the variables distribute. For example, most of the age are between [40,60], the length of time symptoms distribute very unevenly by having a very dense distribution around [0,100]. Also, cholesteral level distributes mostly around [150,300] with small outliers.
+
+(b) The variables age, cad.dur and cholest are numerical. Suppose we wish to investigate the distribution of each of these characteristics for the given data. For each characteristic produce:
+i. A plot that explores the distribution of that characteristic.
+
+ii. A short (1–3 sentences) description of the distribution.
+
+For the length of time symptoms, the plots below have shown that most of the data distribute densely around [0,100] with some outliers between [100,450].
+
+```{r}
+hist(acath.df$cad.dur, 
+     main="Histogram for the length of time symptoms", 
+     xlab="Length of time symptoms", 
+     col="aquamarine",
+     xlim=c(0,500),
+     las=1, 
+     breaks=10)
+boxplot(acath.df$cad.dur, 
+     main="Boxplot for the length of time symptoms", 
+     ylab="Length of time symptoms", 
+     col="aquamarine")
+```
+
+For the patients' age, the plots below have shown that the distribution of age is pretty much looking alike a normal distribution. The mean and median are around 55 with data distributes evenly between 25 and 81.
+
+```{r}
+hist(acath.df$age, 
+     main="Histogram for patient’s age", 
+     xlab="Age", 
+     col="orange",
+     xlim=c(20,90),
+     las=1, 
+     breaks=14)
+boxplot(acath.df$age, 
+     main="Boxplot for patient’s age", 
+     ylab="Age", 
+     col="orange")
+```
+
+For blood cholesterol level, the plots below have shown that the blood cholesterol level mostly distributes around [150,300]. A few outliers also exist between [0,150] and [400,600].
+
+```{r}
+hist(acath.df$choleste, 
+     main="Histogram for blood cholesterol level", 
+     xlab="Blood cholesterol", 
+     col="pink",
+     xlim=c(0,600),
+     las=1, 
+     breaks=12)
+boxplot(acath.df$choleste, 
+     main="Boxplot for blood cholesterol leve", 
+     ylab="Blood cholesterol", 
+     col="pink")
+```
+
+
+(c) Suppose we wish to investigate how cad.dur is related to age and whether this relationship is different for females and males. Create a suitable plot for this purpose. Briefly describe what you learn from your plot.
+
+Conditional plots are used to how the relationship between two variables is affected by another variable. The conditional plot below gave us an idea that the people from [40,70] age group usually have a longer time of symptoms. But sex may be a moderate influence, because female appears to have potential less time symptons than male. Although this might be false or biased because of the sample amount difference between male and female.
+
+```{r}
+#acath.lm<-lm(cad.dur ~ age + sex, data=acath.df)
+#summary(acath.lm)
+mycol=rgb(0,0,1,alpha=.4)
+with(acath.df,coplot(cad.dur~age|sex,pch=19,col=mycol,
+                     xlab=c("Age","Males(0) or Females(1) "),
+                     ylab="Length of time symptoms"))
+```
+
+
+(d) Suppose we wish to investigate how tvdlm is related to age and whether this relationship is different for females and males.
+
+i. First try creating a plot that leaves age as a numeric variable.
+
+```{r}
+mycol=rgb(0,0,1,alpha=.4)
+with(acath.df,coplot(tvdlm~age|sex,pch=19,col=mycol,
+                     xlab=c("Age","Males(0) or Females(1) "),
+                     ylab="Severe coronary artery disease is present or absent"))
+```
+
+ii. Now try converting age to a categorical variable where each level is a different age group. It is up to you decide the ranges for your groups. Note that the cut function in R will make task much easier (refer to its help page in R). Create a suitable mosaic plot.
+
+Here I divide the age into 7 different groups with 56 age difference. Each group contains a 8-year-old age difference. It is very clear that older people usually has more present status on severe coronary artery disease than younger people.
+
+```{r}
+acath.df$age.group <- cut(acath.df$age, seq(min(acath.df$age), 
+max(acath.df$age), by = 8), include.lowest=TRUE)
+with(acath.df,mosaicplot(table(age.group,tvdlm),col=c("pink","aquamarine"), 
+                         main="Mosaic Plot",
+                         ylab = "Severe coronary artery disease is present or absent",
+                         xlab = "Age groups"))
+```
+
+Briefly, summarize what you learn from your plots. Which plot did you find more useful in answering this question?
+
+Answer: Mosaic plot is very clear for identify the relationship between age and tvdlm. It points out older can somehow brings more chance of a present status of tvdlm. Conditional plot has a better feature of pointing out how gender plays a role in the relationship between age and tvdlm. And it shows us a potential relationship that females may have less chance of having present for tvdlm, especially among the very young and old people.
+
+(e) Now try fitting some logistic regression models where tvdlm is the response of interest.
+
+i. Fit a logistic regression model that estimates the probability that severe coronary artery disease is present using the other variables as regressors. For this model include all of the other regressors but do not include any interactions. Describe the impact that each of the explanatory variables has on the probability that severe coronary artery disease is present.
+
+```{r}
+acath.glm = glm(tvdlm~cad.dur+sex+age+choleste, family=binomial, data=acath.df)
+summary(acath.glm)
+```
+
+According to the output above, all four regressors are related to severe coronary artery disease is present. While age has the most significance, we can believe that when age grows, the chance of being present will grow as well. cad.dur and sex also have significant influence on the 'present' status, while female has a less chance of being 'present' - indicates a nagetive relation, cad.dur has a mild positive relation with being 'present'. At last, choleste has a less significance but still strong enough to determine its relationship with being 'present'. This relation is mildly positive.
+
+
+ii. Now check for possibility that gender interacts with one or more of the other explanatory variables. If you find evidence that one or more such interactions exist, explain the impact they have on the way the factors involved affect the response.
+
+```{r}
+# first convert boolean values back to numerical
+#acath.df$sex <- as.numeric(acath.df$sex)
+#acath.df$tvdlm <- as.numeric(acath.df$tvdlm)
+acath.glm = glm(tvdlm~cad.dur * choleste * age * sex, family = binomial, data = acath.df)
+summary(acath.glm)
+anova(acath.glm)
+```
+
+Both the ANOVA table and the logistic regression model provide the idea that there is no interaction existing in this case according to logistic regression model, there is no significant evidence (p < .05) that an iteraction exists among these regressors.
+
+
+Question 2
+
+(a) Find the orthogonal projection matrix for the subspace of R5 spanned by v1 and v2 (call this subspace S12).
+
+```{r}
+v1 = c(1, 1, 0, 1, 1)
+v2 = c(3, 2, 1, 2, 3)
+V = cbind(v1,v2)
+# projection1 is the orthogonal projection matrix for S12
+projection1 = V%*%solve(t(V)%*%V)%*%t(V)
+projection1
+```
+
+(b) Find the orthogonal projection matrix for S|_ 12 (the orthogonal compliment of S12).
+
+```{r}
+# projection2 is orthogonal projection matrix for the orthogonal compliment of S12
+projection2 = diag(rep(1, 5)) - projection1
+projection2
+```
+
+(c) Find the projection of v3 onto S12 and onto S|_12. Show that these two vectors are orthogonal to each other and that the sum of their squared lengths is equal to the squared length of v3.
+
+```{r}
+# generate a projection of v3 onto S12: projection3
+v3 = c(2, 2, 0, -3, 1)
+projection3 = projection1%*%v3
+projection3
+
+# generate a projection of v3 onto 
+# the orthogonal compliment of S12: projection4
+projection4 = projection2%*%v3
+projection4
+
+# vectors projection3 and projection4 are 
+# orthogonal only if projection3 ^ t * projection4 = 0
+
+# round to 5 decimal places
+round(t(projection3)%*%projection4, 5)
+
+round(sum(projection3^2) + sum(projection4^2), 5) == round(sum(v3^2),5)
+```
+
+
+(d) Find two vectors that form an orthogonal basis for S12.
+
+The following work was done under the reference of:
+
+https://yutsumura.com/find-an-orthonormal-basis-of-the-given-two-dimensional-vector-space/.
+
+First, they are not orthogonal as the dot product is 10:
+
+```{r}
+# another vector u1 which is perpendicular to v1 needs to be found
+v1%*%v2
+```
+Let us first find an orthogonal basis for S12 by the Gram-Schmidt orthogonalization process.
+
+Let w1 := v1. Next, let w2 := v2 + av1, where a is a scalar to be determined so that w1 * w2 = 0.
+
+As w1 and w2 is orthogonal, we have:
+
+w1 * w2 = 0
+        = v1 * v2 + 
+          av1 * v1
+        = 10 + 4a
+        
+It follows that a = -5/2 and:
+
+```{r}
+w1 <- v1
+w2 <- v2 - 5/2 * v1
+w2
+```
+Now, to avoid fractions in our computation, let us consider 2w2, instead of w2. Note that the scaling does not change the orthogonality.
+
+We have:
+
+```{r}
+2 * w2
+```
+
+Thus the set {w1, 2w2} is an orthogonal basis for S12.
+
+However, the length of these vectors are not 1 as we see:
+
+```{r}
+lengthw1 = sqrt(1^2 + 1^2 + 0^2 + 1^2 + 1^2)
+lengthw1
+length2w2 = sqrt(1^2 + (-1)^2 + 1^2 + (-1)^2 + 1^2)
+length2w2
+```
+
+Now it suffices to normalize the vectors w1, 2w2 to obtain an orthonormal basis.
+
+Therefore, the set below is an orthonormal basis for S12.
+
+```{r}
+cat("The two vectors form an orthogonal basis for S12 are\n",
+    lengthw1 * w1, " and ", length2w2 * w2) 
+```
+
+
+

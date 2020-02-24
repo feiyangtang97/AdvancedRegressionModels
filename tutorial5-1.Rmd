@@ -1,0 +1,284 @@
+---
+title: "Bootstrap"
+author: "Arden Miller"
+date: "28 March 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+Today we are going to look at using the bootstrap to conduct statistical inference for regression models. The idea is to simulate a sampling distribution for a statistic by resampling from the observations in the data set. The advantage is that we can estimate the sampling distribution empirically.
+
+We will start with a very simple application of the non-parametric bootstrap -- there are a number of different variants of 
+the bootstrap. The non-parametric bootstrap simply involves creating a new dataset by taking a sample (with replacement) from 
+the observations in the existing data set. The new bootstrap data set is the same size as the original data set. As a simple example, we will use the cherry tree data from our lecture slides.
+
+```{r}
+cherry.df<-read.table("cherry.txt",header=T)
+cherry.df
+```
+Recall that one of the models we fitted was:
+```{r}
+cherry.lm<-lm(volume~diameter+I(diameter^2)+height,data=cherry.df)
+summary(cherry.lm)
+```
+
+This data set consists of 31 observations so we need a random sample of size 31 from the numbers 1 to 31. The sample must be take with replacement. This can be done in R using the sample function. I've sorted the results to make it clear that some observations occur multiple times in the new data set and others not at all. 
+
+```{r}
+sort(sample(1:31,31,replace=TRUE))
+```
+
+So we create a new dataset as follows:
+
+
+```{r}
+new.df<-cherry.df[sample(1:31,31,replace=TRUE),]
+new.df
+```
+ 
+Suppose we decided to use the model that includes a quadratic term for diameter but we concerned about the model assumptions (especially Normality and constant variance). Using the non-parameter bootstrap,  we can estimate the sampling distributions for our parameter coefficients empirically. The idea is to generate a large number of bootstrap data sets, fit our model and record the estimated coefficients. The set of bootstrapped coefficients gives us our estimated sampling distribution. 
+
+For the bootstrap data we just created we can fit our model and get the estimated coefficients:
+
+```{r}
+new.lm<-lm(volume~diameter+I(diameter^2)+height,data=new.df)
+new.lm$coefficients
+```
+
+Compare these to the estimates for the actual data set:
+
+```{r}
+cherryA.lm <- lm(volume~diameter+I(diameter^2)+height,data=cherry.df)
+cherryA.lm$coefficients
+```
+
+OK, we need to do this a lot of times. One way is to set up a function that creates a bootstrap sample, fits the model 
+and returns the estimated coefficients:
+
+```{r}
+my.fun=function(){
+new.df<-cherry.df[sample(1:31,31,replace=TRUE),]
+new.lm<-lm(volume~diameter+I(diameter^2)+height,data=new.df)
+return(new.lm$coefficients)
+}
+```
+
+
+Then we use the replicate command to do this a whole bunch of times:
+
+```{r}
+results<-replicate(5000,my.fun())
+results[,1:5]
+```
+
+We can take a look at our sampling distributions for the different parameters:
+
+```{r}
+plot(density(results[1,]))
+```
+
+```{r}
+plot(density(results[2,]))
+```
+
+```{r}
+plot(density(results[3,]))
+```
+
+```{r}
+plot(density(results[4,]))
+```
+
+Now we can find the mean and variances for these bootstrap sampling distributions:
+
+```{r}
+apply(results,1,mean)
+apply(results,1,var)
+```
+
+Note that expected values of the bootstrap estimates are the estimated coefficients for the original data set. The bootstrap is not used to get a better estimate of the coefficient -- its used to get a better approximation of the sampling distribution for the estimate. The difference between the estimates for our original data and the mean of the bootstrap estimates is called the bootstrap bias -- as we increase the number of bootstrap samples this bias will get smaller and smaller.
+
+ 
+We can also estimate the covariance matrix for our vector of estimated coefficients:
+
+```{r}
+cov(t(results))
+```
+
+Compare these to ones estimated using our model assumptions:
+
+```{r}
+vcov(cherryA.lm)
+```
+
+The bootstrap sampling distributions can be used to get confidence intervals for the estimated coefficients in several different ways. Two simple ways are (a) Normal theory intervals and (b) percentile intervals. Both of these methods are adjusted to take into account the bootstrap bias:
+
+(a) Normal theory intervals: original estimate +- 1.96 bootstrap std. err.
+
+(b) percentile intervals: take the .025 and .975 quantiles of the bootstrap distribution and subtract the bootstrap bias.
+
+For our example suppose we want a 95% confidence interval for the coefficient for height. 
+
+For the Normal theory approach we should first check the sampling distribution is approximately Normal:
+
+```{r}
+qqnorm(results[4,])
+```
+
+Then we take:
+
+```{r}
+cherryA.lm$coefficients[4] - 1.96*sqrt(var(results[4,]))
+cherryA.lm$coefficients[4] + 1.96*sqrt(var(results[4,]))
+```
+
+For the percentile approach we use:
+
+```{r}
+ quantile(results[4,],c(.025,.975))-(mean(results[4,])-cherryA.lm$coefficients[4])
+```
+
+There is a function in R called boot that can be used to do the bootstrap for us:
+
+```{r}
+library(boot)
+?boot
+```
+
+To create bootstrap estimates for our example we could use boot as follows:
+
+```{r}
+bstrap <- function(data, indices) {
+  new.df <- data[indices,] 
+  new.lm <- lm(volume~diameter+I(diameter^2)+height, data=new.df)
+  return(coef(new.lm))
+}
+
+boot.out <- boot(data=cherry.df, statistic=bstrap, R=10000)
+boot.out
+```
+
+To look at the results for the coefficient for height:
+
+```{r}
+plot(boot.out,index=4)
+```
+
+To get confidence intervals:
+
+```{r}
+boot.ci(boot.out,index=4,type="perc")
+```
+
+
+We can also use the bootstrap to create a confidence interval for the predicted response at a set values of the explanatory variables.
+
+
+```{r}
+pred.df<-data.frame(height=76,diameter=13)
+my.fun=function(){
+new.df<-cherry.df[sample(1:31,31,replace=TRUE),]
+new.lm<-lm(volume~diameter+I(diameter^2)+height,data=new.df)
+return(predict(new.lm,pred.df))}
+
+results<-replicate(5000,my.fun())
+summary(results)
+```
+```{r}
+plot(density(results))
+```
+
+```{r}
+quantile(results,c(.025,.975))
+```
+
+Compare these to the theorey based confidence interval.
+
+```{r}
+predict(cherryA.lm,pred.df, interval = "confidence")
+```
+
+Now lets use the bootstrap to create a prediction interval. We use the same procedure as for a confidence interval, except for each estimate of the
+fitted value, we add a randomly selected residual.
+```{r}
+pred.df<-data.frame(height=76,diameter=13)
+my.fun=function(){
+new.df<-cherry.df[sample(1:31,31,replace=TRUE),]
+new.lm<-lm(volume~diameter+I(diameter^2)+height,data=new.df)
+return(predict(new.lm,pred.df)+sample(residuals(new.lm),1))}
+
+results<-replicate(5000,my.fun())
+summary(results)
+```
+
+```{r}
+plot(density(results))
+```
+
+```{r}
+quantile(results,c(.025,.975))
+```
+Compare these to the theorey based confidence interval.
+
+```{r}
+predict(cherryA.lm,pred.df, interval = "prediction")
+```
+
+Now we will try the parametric bootstrap. For this procedure we fit a model to the data. Then we generate new data sets using the fitted model. One possible application would be to determine if we have over/under dispersion for either Poisson regression or logistic regression. Consider the crab data that we used in lecture slides 1. 
+
+```{r}
+crab.df<-read.table("crab.data",header=T)
+crab.df$color=factor(crab.df$color)
+crab.df$spine=factor(crab.df$spine)
+crab3.glm=glm(sats~color+weight,family=poisson,data=crab.df)
+summary(crab3.glm)
+```
+
+If we fit the quasipoisson model we get an estimated scale parameter of over 3.
+
+```{r}
+crab3A.glm=glm(sats~color+weight,family=quasipoisson,data=crab.df)
+summary(crab3A.glm)
+```
+
+This seemed larger than we would expect but is it really? So we will simulate a bunch of data sets for our fitted model by generating a new response vector each time. Then we'll fit a GLM using the family=quasipoisson and record the estimated dispersion parameter each time.
+
+```{r}
+fv<-fitted.values(crab3.glm)
+parboot<- function(){
+  new.df=crab.df
+  new.df$sats=rpois(length(fv),fv)
+  new.glm <- glm(sats~color+weight,family=quasipoisson,data=new.df)
+  return(summary(new.glm)$dispersion)
+}
+
+results2<-replicate(5000,parboot())
+results2[1:5]
+```
+
+Now lets see what this set of estimates look like:
+
+```{r}
+plot(density(results2))
+```
+
+Clearly, a value over 3 is very unusual. 
+
+
+
+Additional Tasks
+
+Suppose that for the parametric bootstrap we did for the crab data, the estimated dispersion parameter had been 1.3 (rather than 3.18).
+
+1. Find a p-value for a hypothesis test (null hypothesis is there is no over dispersion) based on the Normal theory approximation. Note that you should first check to see that the bootstrap distribution is approximately Normal.
+
+2. Redo 1 but use the bootstrap distribution to directly calculate the p-value.
+

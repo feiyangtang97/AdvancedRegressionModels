@@ -1,0 +1,427 @@
+---
+title: "STATS 762 Assignment 4"
+author: "Francis Tang, ID 240887036"
+date: "Due: 12 June 2019"
+output: pdf_document
+---
+\section{Packages}
+
+```{r}
+library(MASS)
+library(klaR)
+library(nnet)
+library(reshape2)
+library(ggplot2)
+library(glmnet)
+library(splines)
+```
+
+\section{Question 1}
+
+\subsection{(a)}
+
+First we read data and only subset the positions contain RDM, RCM and LS:
+
+```{r}
+#read data
+fifa=read.csv("~/Desktop/STATS 762/Fifa2019.csv")
+fifa0 <- fifa[,-1]
+fifa1 <- subset(fifa0, Position %in% c("RDM", "RCM", "LS"))
+fifa1$Position <- factor(fifa1$Position)
+```
+
+Now we first try to fit a multinomial regression:
+```{r}
+#fit a multinomial regression for the fifa data
+fifa.mn <- multinom(Position ~ ., data = fifa1)
+```
+
+Make predictions based on the multinomial regression model, the results are shown in the matrix:
+```{r}
+#prediction
+mn.pred=predict(fifa.mn,fifa1)
+#confusion matrix
+table(mn.pred,fifa1$Position)
+```
+
+Now let's try to fit LDA:
+```{r}
+#Fit the LDA for the data
+lda.fifa <- lda(Position ~ ., fifa1)
+```
+
+Make predictions based on the LDA model, the results are shown in the matrix:
+```{r}
+#prediction
+lda.pred=predict(lda.fifa,fifa1)
+#confusion matrix
+table(lda.pred$class,fifa1$Position)
+```
+
+Now let's try to fit QDA:
+```{r}
+#Fit the QDA for the train data
+qda.fifa <- qda(Position ~ .,fifa1)
+```
+
+Make predictions based on the QDA model, the results are shown in the matrix:
+```{r}
+#prediction
+qda.pred=predict(qda.fifa,fifa1)
+#confusion matrix
+table(qda.pred$class,fifa1$Position)
+```
+
+It is very obvious that QDA model achieved the best prediction accuracy. So in this case, we will pick QDA as our best model.
+
+\subsection{(b)}
+
+Here we need to find those rows which result in predicting RDM and RCM. This means that the membership probability of LS must be minimised and RDM and RCM need to be as close as possible. In this case, we pick 0.001 as the threshold for LS, [0.4.0.6] for RDM and RCM. 
+
+```{r}
+#print the class membership probability
+qda.pred.prob.df <- as.data.frame.matrix(qda.pred$posterior)
+#extract those rows which not resulting in LS
+new1.df <- qda.pred.prob.df[(qda.pred.prob.df$LS < 0.001), ]
+#one more step to extract those who result in both RDM and RCM (both probabilities between 0.4 to 0.6)
+new2.df <- new1.df[new1.df$RCM > 0.4 & new1.df$RDM > 0.4, ]
+new2.df
+#match those performance scores in the original dataset and print out
+subset(fifa1[,-1], rownames(fifa1) %in% rownames(new2.df))
+```
+
+\subsection{(c)}
+
+We substitute the number given from the question then use QDA to predict the result:
+
+```{r}
+qc.df = data.frame(Crossing = 57.487, Finishing = 57.71277, HeadingAccuracy = 58.64657,
+                    ShortPassing = 68.83688, Volleys = 54.40426, Dribbling = 65.74468,
+                    Curve = 57.09456, FKAccuracy = 53.16312, LongPassing = 63.4539,
+                    BallControl = 68.76123, Acceleration = 67.00591, SprintSpeed = 66.63475,
+                    Agility = 68.67376, Reactions = 66.62648, Balance = 67.78369,
+                    ShotPower = 67.30378, Jumping = 67.24232, Stamina = 73.51773,
+                    Strength =69.20331, LongShots = 61.43735, Aggression = 65.65839,
+                    Interceptions = 55.4669, Positioning = 62.02719, Vision = 63.98818,
+                    Penalties = 57.40189, Composure = 65.89835, Marking = 54.90898,
+                    StandingTackle = 55.4669, SlidingTackle = 51.90544, GKDiving = 10.69267,
+                    GKHandling = 10.63357, GKKicking = 10.83333, GKPositioning = 10.65248,
+                    GKReflexes = 10.69031)
+qda.pred1=predict(qda.fifa,qc.df)
+qda.pred1
+```
+
+\subsection{(d)}
+Here we fit a classification tree:
+```{r}
+library(rpart); library(rpart.plot); library(rattle); library(gbm)
+#Fit a classifcation tree
+set.seed(1e5)
+fifa.cart0 <- rpart(Position~., data=fifa1,method='class',cp=0.001)
+fifa.cart0$cptable
+```
+
+Now we prune the tree with a particular cp. We noticed that 0.008791209 has the smallest cross validation error 0.6021978, so we use this one to prune the tree. We will also compare this with the full model.
+```{r}
+#Prune the tree with a particular complexity paramter (cp)
+
+fifa.prune0 <-prune(fifa.cart0,cp=fifa.cart0$cptable[6,1])
+fancyRpartPlot(fifa.prune0, uniform=TRUE,main=" ")
+
+fifa.prune0.full <-prune(fifa.cart0,cp=fifa.cart0$cptable[14,1])
+fancyRpartPlot(fifa.prune0.full, uniform=TRUE,main=" ")
+```
+
+\subsection{(e)}
+Now we use pruned tree to make predictions also comparing the full model. Although the full model has better predictions, it may suffer from the problem of overfitting.
+```{r}
+fifa.pred0 <- predict(fifa.prune0,newdata=fifa1[,-1],type='class')
+fifa.pred0.full <- predict(fifa.prune0.full,newdata=fifa1[,-1],type='class')
+table(fifa.pred0,fifa1$Position)
+table(fifa.pred0.full,fifa1$Position)
+```
+
+Comparing to the QDA model, the classification tree does not achieve a better prediction accuracy. So the best model will remain as the QDA model in (a).
+```{r}
+#confusion matrix
+table(qda.pred$class,fifa1$Position)
+```
+
+
+\section{Question 2:}
+
+\subsection{(a)}
+
+In this question, instead of using Position in Question 1, we use Overall for processing.
+
+```{r}
+#keep Overall but get rid of Position
+fifa3 <- subset(fifa, Position %in% c("RDM", "RCM", "LS"))
+fifa3$Position <- factor(fifa3$Position)
+fifa2 <- fifa3[,-2]
+```
+
+First, we fit a regression tree with cp=0.001
+
+```{r}
+#Setup random numbers
+set.seed(1e5)
+
+#Fit a regression tree with cp=0.001
+fifa2.cart <- rpart(Overall~. , data=fifa2,method='anova',cp=0.001)
+fifa2.cart$cptable
+```
+
+When $\alpha$ = 0.001255896, the cv-error is minimised: 0.1871208. $\alpha$ = 0.001965770 is the largest value in which
+the corresponding cv-error: 0.1980072 is within the one standard deviation around the minimum error: 0.1871208 + 0.01117898 = 0.19829978.
+
+Now we prue the trees and plot it out together:
+
+```{r}
+#Prune trees
+fifa2.opt=prune(fifa2.cart,cp=fifa2.cart$cptable[28,1])
+fancyRpartPlot(fifa2.opt, uniform=TRUE,main="Pruned Regression Tree")
+fifa2.opt
+```
+
+
+\subsection{(b)}
+
+This question requires us to fit a gradient boosting regression tree:
+
+```{r}
+#Fit a boosting reg tree
+fifa.gbm <- gbm(Overall~., data = fifa2, distribution='gaussian',
+                shrinkage = 0.04, n.trees = 4000, cv.folds = 10)
+fifa.gbm.perf = gbm.perf(fifa.gbm, method = "cv")
+fifa.gbm.perf
+```
+
+From the result above we can conclude that the optimal number of trees are 3058.
+
+\subsection{(c)}
+
+```{r}
+#Predict values and find the MSE using optimal regression tree
+fifa2.opt.pred <- predict(fifa2.opt,newdata=fifa2[,-1],type='vector')
+opt.res=fifa2.opt.pred-fifa2$Overall; 
+mean(opt.res^2)
+```
+
+```{r}
+#Predict values and find the MSE using optimal gradient boosting regression tree
+fifa.gbm.pred <- predict(fifa.gbm,newdata = fifa2[,-1],n.trees = fifa.gbm.perf,type = "response")
+#mse
+fifa.res=fifa.gbm.pred-fifa2$Overall;
+mean(fifa.res^2)
+```
+
+```{r}
+#Predict values and find the MSE using optimal linear regression with lasso 
+set.seed(1e5)
+cv.lasso=cv.glmnet(as.matrix(fifa2[,-1]),as.matrix(fifa2[,1]),alpha=1,standardize=TRUE)
+fifa.lasso.pred <- predict(cv.lasso, as.matrix(fifa2[,-1]),
+type='response',lambda=cv.lasso$lambda.1se)
+lasso.res = fifa.lasso.pred - fifa2$Overall
+mse3 = mean(lasso.res^2)
+mse3
+```
+
+From the comparison of MSE among those three model above, we found out that the optimal gradient boosting regression tree model achieved the smallest MSE, so we are able to conclude that the optimal gradient boosting regression tree model is the best model for this case.
+
+\subsection{(d)}
+
+In this question, we are required to plot residual against overall score for the optimal gradient boosting regression tree:
+
+```{r}
+par(mfrow=c(1,2)); plot(fifa2$Overall,fifa.res,xlab='observation',ylab='residual'); 
+qqnorm(fifa.res/sd(fifa.res))
+```
+
+The residual VS observation plot shows no obvious pattern and most of the points concentrate between [-2, 2] which is actually a good result for modelling. Normal Q-Q plots also proves the same conclusion as almost all points stand on the line together.
+
+\subsection{(e)}
+
+This question requires us to compare the relative variable importance of both my trees in (a) and (b).
+
+```{r}
+#reltive variable importance of optimal regression tree
+fifa2.cart$variable.importance/sum(fifa2.cart$variable.importance)
+
+#reltive variable importance of optimal gradient boosting regression tree 
+fifa.gbm.summary <- summary.gbm(fifa.gbm)
+```
+
+In order to compare them, we combine them together to compare:
+
+```{r}
+ort.rvi <- as.matrix(fifa2.cart$variable.importance/sum(fifa2.cart$variable.importance) * 100)
+gbm.rvi <- fifa.gbm.summary$rel.inf
+compare.rvi = cbind(ort.rvi, gbm.rvi[match(rownames(ort.rvi), rownames(fifa.gbm.summary))])
+colnames(compare.rvi) = c("regression tree", "gradient boosting tree")
+compare.rvi
+```
+
+To find out which variables have similar importance score, we allow them to have 10% difference in this case:
+
+```{r}
+compare.rvi[0.9< compare.rvi[,1]/compare.rvi[,2] & compare.rvi[,1]/compare.rvi[,2]<1.11, ]
+```
+
+In this case we have "Strength" has similar results between tree models in (a) and (b). Let's loose the boundary of similarity:
+
+```{r}
+compare.rvi[0.75< compare.rvi[,1]/compare.rvi[,2] & compare.rvi[,1]/compare.rvi[,2]<1.33, ]
+```
+
+Now we have four more! "StandingTackle", "SlidingTackle", "Aggression", "Crossing" and "Strength". So we can conclude that these five are roughly equally important.
+
+Now it comes with the question: why all variables are NOT equally important? To answer this question, we need to go back to what actually determines relative variable importances - it depends on how many times this variable has been chosen for splitting the tree, which means a variable achieves higher importance score only because it has been chosen for more time than others. Rather than just calculate the times when the variable got chosen for splitting for optimal regression trees, optimal gradient boosting regression tree sums its importance of each trees separately. The sum will be divided by the total number of trees, which makes it different from normal regression trees, so the difference comes out.
+
+\section{Question 3}
+
+\subsection{(a)}
+
+First, we read the data and give indexes to the rows:
+
+```{r}
+accident <- read.csv("~/Desktop/STATS 762/airliner_accidents-1.csv")
+accident$index <- 1:72
+```
+
+The goal is to model the fatal accidents with year using both natural splines and B-splines to fit. We fit the temperature data using natrual splines and B-splines with the degree of 3. Various number of inner knots are considered, 0-10.
+
+```{r}
+set.seed(1e5)
+acci.mse.ns=acci.mse.bs=c(0:10)
+n.knots=c(0:10)
+for(j in 1:length(acci.mse.ns)){
+  
+  #natural splines
+  a.ns=ns(accident$index,df=n.knots[j]+1,intercept=FALSE)
+  #B splines
+  a.bs=bs(accident$index,df=n.knots[j]+3,intercept=FALSE)
+  #predict accidents
+  pre.acci.ns=predict(lm(accident$Fatal~a.ns), interval='confidence'); 
+  pre.acci.bs=predict(lm(accident$Fatal~a.bs), interval='confidence'); 
+  #MSE
+  acci.mse.ns[j]=mean((accident$Fatal-pre.acci.ns[,1])^2)
+  acci.mse.bs[j]=mean((accident$Fatal-pre.acci.bs[,1])^2)
+}
+
+plot(n.knots,acci.mse.ns,'l',ylab='MSE',xlab='Number of knots'); lines(n.knots,acci.mse.bs,col='red');
+legend(6.5,70,legend=c("Natural splines","B splines, Order 3"),col=c(1,2),lty=1); 
+```
+
+LOOCV error -vs- number of knots:
+
+```{r}
+#LOOCV error -vs- number of knots
+acci.cv.ns=acci.cv.bs=rep(0,length(n.knots))
+for(j in 1:length(n.knots)){ for(l in 1:length(accident$index)){
+  #predict accidents 
+  pre.a.ns=predict(lm(Fatal~ns(index,df=n.knots[j]+1,
+                               intercept=FALSE,Boundary.knots=c(1,72)),
+                              data=accident[-l,]),newdata=accident[l,])
+  pre.a.bs=predict(lm(Fatal~bs(index,df=n.knots[j]+3,intercept=FALSE,
+                               Boundary.knots=c(1,72)),data=accident[-l,]),
+                              newdata=accident[l,])
+  #cumulative sum of error
+  acci.cv.ns[j]=acci.cv.ns[j]+(accident$Fatal[l]-pre.a.ns)^2
+  acci.cv.bs[j]=acci.cv.bs[j]+(accident$Fatal[l]-pre.a.bs)^2
+}}
+acci.cv.ns=acci.cv.ns/length(accident$index)
+acci.cv.bs=acci.cv.bs/length(accident$index)
+
+plot(n.knots,log(acci.cv.ns),ylab='log(cv error)',xlab='Number of knots','o',ylim=c(3.5,4.5)); lines(n.knots,log(acci.cv.bs),col='red','o');
+legend(6,4.5,legend=c("Natural splines","B splines, Order 3"),col=c(1,2), lty=1); 
+```
+
+It is not hard to figure out that when the natural splines has the smallest error when number of knots equals 7 and B splines has the smallest errir when number of knots equals to 10.
+
+```{r}
+acci0.ns=predict(lm(Fatal~ns(index,df=5+1,intercept=FALSE),data=accident),
+                 newdata=accident,interval = 'confidence')
+acci0.bs=predict(lm(Fatal~bs(index,df=5+3,intercept=FALSE),data=accident),
+                 newdata=accident,interval = 'confidence')
+par(mfrow=c(1,2)); 
+plot(accident$index,accident$Fatal,ylim=c(0,90),main='Natural splines');
+matlines(accident$index,acci0.ns,lty=c(1,3,3),col=c(4,4,4));
+plot(accident$index,accident$Fatal,ylim=c(0,90),main='B splines'); 
+matlines(accident$index,acci0.bs,lty=c(1,3,3),col=c(2,2,2));
+```
+
+We can conclude that B splines achieves a better result than natural splines, it has smaller LOOCVSE and MSE.
+
+\subsection{(b)}
+
+The goal is to model the hijacking insidents with fatal accidents using both natural splines and B-splines to fit. We fit the temperature data using natrual splines and B-splines with the degree of 3. Various number of inner knots are considered, 0-10.
+
+```{r}
+# dataset has been sorted based on the fatal accidents
+accident<-accident[sort(accident$Fatal,index=TRUE)$ix,]
+```
+
+LOOCV for natrual splines and B splines
+```{r}
+accident.cv.ns1=accident.cv.bs1=rep(0,length(n.knots))
+for(j in 1:length(n.knots)){ for(l in 1:length(accident$Fatal)){
+  #predict hijacking insidents
+  a.ns.pre1=predict(glm(Hijacking~ns(Fatal,df=n.knots[j]+1,
+                                     intercept=FALSE,Boundary.knots=c(10,80)),
+                                    data=accident[-l,], family = poisson),
+                                    newdata=accident[l,],type = "response")
+  a.bs.pre1=predict(glm(Hijacking~bs(Fatal,df=n.knots[j]+3,
+                                     intercept=FALSE,Boundary.knots=c(10,80)),
+                                    data=accident[-l,],family = poisson),
+                                    newdata=accident[l,],type = "response")
+  #cumulative sum of error
+  accident.cv.ns1[j]=accident.cv.ns1[j]+(accident$Hijacking[l]-a.ns.pre1)^2
+  accident.cv.bs1[j]=accident.cv.bs1[j]+(accident$Hijacking[l]-a.bs.pre1)^2
+}}
+accident.cv.ns1=accident.cv.ns1/length(accident$Fatal)
+accident.cv.bs1=accident.cv.bs1/length(accident$Fatal)
+
+plot(n.knots,log(accident.cv.ns1),ylab='log(loocv error)',
+     xlab='Number of knots','o',ylim = c(5.7, 6.1))
+lines(n.knots,log(accident.cv.bs1),col='red','o')
+legend(6,6.1,legend=c("Natural splines","B splines, Order 3"),
+       col=c(1,2), lty=1) 
+
+```
+
+It is not hard to figure out that when the natural splines has the smallest error when number of knots equals 4 and B splines has the smallest errir when number of knots equals to 10.
+
+Rather than fitting only natual splines and B splines, we also fit a possion regression based on that.
+
+```{r}
+n.knots.ns <- 4
+n.knots.bs <- 10
+# Natrual splines
+acci0.ns1=predict(glm(Hijacking~ns(Fatal,df = n.knots.ns+1,intercept=FALSE),
+                      data=accident,family = poisson),
+                      type = "response", newdata=accident,
+                      interval = 'confidence')
+# B splines
+acci0.bs1=predict(glm(Hijacking~bs(Fatal,df = n.knots.bs+3,intercept=FALSE),
+                      data=accident, family = poisson),
+                      type = "response", newdata=accident,
+                      interval = 'confidence')
+# Possion model
+acci0.p=predict(glm(Hijacking~Fatal,data=accident,family = poisson),
+                      type = "response",interval = 'confidence')
+par(mfrow=c(2,2))
+plot(accident$Fatal,accident$Hijacking, ylim = c(0,90),
+     main = "Natural splines") 
+matlines(accident$Fatal,acci0.ns1,lty=c(1,3,3),col=c(4,4,4))
+plot(accident$Fatal,accident$Hijacking, ylim = c(0,90),
+     main = "B splines") 
+matlines(accident$Fatal,acci0.bs1,lty=c(1,3,3),col=c(2,2,2))
+plot(accident$Fatal,accident$Hijacking, ylim = c(0,90),
+     main = "Poisson model") 
+matlines(accident$Fatal,acci0.p,lty=c(1,3,3),col=c(6,6,6))
+```
+
+We can conclude that B splines achieves a better result than natural splines, it has smaller LOOCVSE and MSE, the same as question 2(b).
+
+Description of the relationship of those incidents: it is obvious that most of the large Hijacking points concentrates between 25 and 70, Hijacking points are relatively very small in [10,25] and [70,80]. There are some very high Hijacking points locating between 60 and 70. Also, most of the Hijacking points locate between [30,60] fatal interval. There can be a potential relationship between Hijacking and Fatal as in [30,60] of Fatal, Hijacking keeps increasing.

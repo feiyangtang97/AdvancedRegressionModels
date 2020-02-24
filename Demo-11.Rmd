@@ -1,0 +1,273 @@
+---
+title: "STATS 762 Week 12"
+author: " "
+date: "June 5, 2019"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+####Preparation
+First I loaded required packages and read the temperature data.
+```{r}
+library(splines)
+
+Ack=data.frame(Time=c(1:24),Temperature=c(17,17,17,16,16,16,15,15,16,16,17,17,17,17,15,14,14,14,13,13,13,12.5,12,12))
+```
+
+##Polynomial regression 
+```{r}
+#Slide 6
+ord=c(1:10); #polynomial degrees 1-10
+poly.err=poly.mse=rep(0,length(ord)); #model fit error 
+
+for(i in 1:length(ord)){
+  #MSE
+  poly.mse[i]=mean((Ack$Temperature-fitted(lm(Temperature ~ poly(Time,ord[i],raw=TRUE),data=Ack)))^2)
+  
+  #LOOCV (leave one out cross validatoin)
+  for(j in 1:length(Ack$Time)){
+  poly.err[i]=poly.err[i]+(Ack$Temperature[j]-predict(lm(Temperature ~ poly(Time,ord[i],raw=TRUE),data=Ack[-j,]),newdata=Ack[j,]))^2
+}}
+
+par(mfrow=c(1,2))
+plot(ord,poly.mse,xlab='degree',ylab='MSE')
+plot(ord,poly.err,xlab='degree',ylab='LOOCV error')
+
+#slide 7
+#Let's fit 8 polynomial regressions
+fit1 <- fitted(lm(Temperature ~ poly(Time,1,raw=TRUE),data=Ack))
+fit2 <- fitted(lm(Temperature ~ poly(Time,2,raw=TRUE),data=Ack))
+fit3 <- fitted(lm(Temperature ~ poly(Time,3,raw=TRUE),data=Ack))
+fit4 <- fitted(lm(Temperature ~ poly(Time,4,raw=TRUE),data=Ack))
+fit7 <- fitted(lm(Temperature ~ poly(Time,7,raw=TRUE),data=Ack))
+fit8 <- fitted(lm(Temperature ~ poly(Time,8,raw=TRUE),data=Ack))
+
+plot(Ack$Time,Ack$Temperature,ylim=c(11,18)); matlines(Ack$Time,cbind(fit1,fit2,fit3,fit4,fit7,fit8),lty=1,col=c(1:6))
+legend(2,13,legend=c("deg 1","deg 2","deg 3","deg 4","deg 7","deg 8"),col=c(1:6), lty=1);
+
+```
+
+##Natural splines
+###Basis function 
+```{r}
+#slide 17
+#plot basis functions for various knots
+
+#x-values between 0 and 1
+uvec=seq(from=0,to=1,length.out=1e3);
+
+#vector of degrees of freedome
+v=c(1,2,3,4,6,8); nvec=length(uvec)
+
+par(mfrow=c(2,3))
+plot(uvec,ns(uvec,df=1,intercept=FALSE),'l',main="0 knot",xlab="",ylab="Basis")
+for(j in 2:6){
+plot(uvec,rep(0,nvec),type='n',main=paste(v[j]-1,"knots"),xlab="",ylab="Basis");
+u.ns=ns(uvec,df=v[j],intercept=FALSE) #basis functions
+for(i in 1:v[j]){lines(uvec,u.ns[,i],col=i)}
+}
+
+```
+###Regression using natural splines
+We fit the temperature data using natural splines.
+
+```{r}
+#slide 19
+temp.mse.ns=rep(0,6)
+#vector of degrees of freedome
+v=c(1,2,3,4,6,8); 
+
+par(mfrow=c(2,3))
+for(j in 1:6){
+#find basis functions for natural splines
+n.time=ns(Ack$Time,df=v[j],intercept=FALSE)
+
+#predict the temperature given a time
+pre.temp=predict(lm(Ack$Temperature~n.time), interval='confidence'); 
+
+#MSE
+temp.mse.ns[j]=mean((Ack$Temperature-pre.temp[,1])^2)
+
+plot(Ack$Time,Ack$Temperature,main=paste(v[j]-1,"knots"),ylim=c(min(Ack$Temperature)-2,max(Ack$Temperature)+2)); 
+text(10,10,paste("MSE",round(temp.mse.ns[j],digits=4))); lines(Ack$Time,pre.temp[,1],col='red'); 
+lines(Ack$Time,pre.temp[,2],lty=2,col='red'); lines(Ack$Time,pre.temp[,3],lty=2,col='red')
+}
+
+#slide 20
+#Fit the data using natural splines with 1-21 knots (2-22 degrees of freedom)
+rmse=rep(0,20)
+for(i in 1:20){ 
+  #basis functions for natural splines
+  yn=ns(Ack$Time,df=(i+1),intercept=FALSE)
+  #MSE
+  rmse[i]=mean((Ack$Temperature-fitted(lm(Temperature~yn,data=Ack)))^2)
+}
+plot(c(1:20),rmse,ylab='MSE',xlab='number of knots')
+
+
+#slide 21; 
+v=c(5,17)
+par(mfrow=c(1,2))
+for(j in 1:2){
+  n.time=ns(Ack$Time,df=v[j]+1,intercept=FALSE)
+  pre.temp=predict(lm(Temperature~n.time,data=Ack), interval = 'confidence'); 
+  temp.mse.ns=mean((Ack$Temperature-pre.temp[,1])^2)
+  plot(Ack$Time,Ack$Temperature,main=paste(v[j],"knots"),ylim=c(min(Ack$Temperature)-2,max(Ack$Temperature)+2)); 
+  text(10,10,paste("MSE",round(temp.mse.ns,digits=4)));
+  matlines(Ack$Time,pre.temp,col=2,lty=c(1,2,2))
+  axis(side=1, at=attributes(n.time)$knots, labels = FALSE,lwd.ticks=3,col.ticks="red")
+}
+```
+
+###B-splines
+
+The number of knots is fixed to 10 (K=10) and basis functions of B-splines are found for various degrees M (M=(1,2,3,4,6,8))
+```{r}
+#slide 27
+uvec=seq(from=0,to=1,length.out=5e3); 
+#vector of degrees 
+v=c(1,2,3,4,6,8); nvec=length(uvec)
+
+par(mfrow=c(2,3))
+for(j in 1:6){
+  plot(uvec,rep(0,nvec),type='n',main=paste("M=",v[j]),xlab="",ylab="Basis",cex.main=2,ylim=c(0,1));
+  #basis functions for B-splines
+  u.bs=bs(uvec,degree=v[j],df=v[j]+10,intercept=TRUE)
+  matlines(uvec,u.bs,lty=1); abline(v=attributes(u.bs)$knots, lty=3, col="grey",lwd=1.4)
+}
+```
+We fix the degree to 3 and fit B-splines to Auckalnd temperature data.
+```{r}
+#number of inner knots
+v=c(0,1,2,3,5,7); temp.mse.bs=rep(0,length(v))
+
+par(mfrow=c(2,3))
+for(j in 1:6){
+  #basis funcitons for B splines when the degree is 3
+  n.time=bs(Ack$Time,df=v[j]+3,intercept=FALSE)
+  #predict temperatures given time
+  pre.temp=predict(lm(Temperature~n.time,data=Ack), interval = 'confidence'); 
+  #MSE
+  temp.mse.bs[j]=mean((Ack$Temperature-pre.temp[,1])^2)
+  plot(Ack$Time,Ack$Temperature,main=paste(v[j],"knots"),ylim=c(min(Ack$Temperature)-2,max(Ack$Temperature)+2)); 
+  text(10,10,paste("MSE",round(temp.mse.bs[j],digits=4))); matlines(Ack$Time,pre.temp,col=2,lty=c(1,2,2));
+}
+```
+### Fit the temperature data using natrual splines and B-splines with the degree of 3.
+### Various number of inner knots are considered, 0-19.
+```{r}
+#slide 30
+temp.mse.ns=temp.mse.bs=n.knots=c(0:19)
+for(j in 1:length(temp.mse.ns)){
+  
+  #natural splines
+  t.ns=ns(Ack$Time,df=n.knots[j]+1,intercept=FALSE)
+  #B splines
+  t.bs=bs(Ack$Time,df=n.knots[j]+3,intercept=FALSE)
+  #predict temperatures
+  pre.t.ns=predict(lm(Temperature~t.ns,data=Ack), interval = 'confidence'); 
+  pre.t.bs=predict(lm(Temperature~t.bs,data=Ack), interval = 'confidence'); 
+  #MSE
+  temp.mse.ns[j]=mean((Ack$Temperature-pre.t.ns[,1])^2)
+  temp.mse.bs[j]=mean((Ack$Temperature-pre.t.bs[,1])^2)
+}
+
+plot(n.knots,temp.mse.ns,'l',ylab='MSE',xlab='Number of knots'); lines(n.knots,temp.mse.bs,col='red');
+legend(12,0.85,legend=c("Natural splines","B splines, Order 3"),col=c(1,2),lty=1); 
+
+
+#slide 31
+#LOOCV error -vs- number of knots
+temp.cv.ns=temp.cv.bs=rep(0,length(n.knots))
+for(j in 1:length(n.knots)){ for(l in 1:length(Ack$Time)){
+  #predict temperatures 
+  t.ns=predict(lm(Temperature~ns(Time,df=n.knots[j]+1,intercept=FALSE,Boundary.knots=c(1,24)),data=Ack[-l,]),newdata=Ack[l,])
+  t.bs=predict(lm(Temperature~bs(Time,df=n.knots[j]+3,intercept=FALSE,Boundary.knots=c(1,24)),data=Ack[-l,]),newdata=Ack[l,])
+  #cumulative sum of error
+  temp.cv.ns[j]=temp.cv.ns[j]+(Ack$Temperature[l]-t.ns)^2
+  temp.cv.bs[j]=temp.cv.bs[j]+(Ack$Temperature[l]-t.bs)^2
+}}
+temp.cv.ns=temp.cv.ns/length(Ack$Time)
+temp.cv.bs=temp.cv.bs/length(Ack$Time)
+
+plot(n.knots,log(temp.cv.ns),ylab='log(cv error)',xlab='Number of knots','o',ylim=c(-3,3)); lines(n.knots,log(temp.cv.bs),col='red','o');
+legend(12,2,legend=c("Natural splines","B splines, Order 3"),col=c(1,2), lty=1); 
+
+#slide 32
+t.ns=predict(lm(Temperature~ns(Time,df=5+1,intercept=FALSE),data=Ack),newdata=Ack,interval = 'confidence')
+t.bs=predict(lm(Temperature~bs(Time,df=5+3,intercept=FALSE),data=Ack),newdata=Ack,interval = 'confidence')
+par(mfrow=c(1,2)); 
+plot(Ack$Time,Ack$Temperature,ylim=c(11,18),main='Natural splines'); matlines(Ack$Time,t.ns,lty=c(1,3,3),col=c(1,1,1));
+plot(Ack$Time,Ack$Temperature,ylim=c(11,18),main='B splines'); matlines(Ack$Time,t.bs,lty=c(1,3,3),col=c(1,1,1));
+
+```
+### Wage data
+Load the data.
+```{r}
+Wage=read.csv(file='Wage.csv',header=TRUE)
+```
+The degree is fixed to 3 for B-splines. We find the optimal number of knots for B splines and natural splines uding 10-folder cv.
+
+```{r}
+#slide 36
+
+#possible numbers of knots
+n.knots=c(0:30)
+cv.wage=matrix(0,length(n.knots),2)
+#indicies for 10 cv folders
+ind=rep(c(1:10),300);
+
+for(j in 1:length(n.knots)){ for(l in 1:max(ind)){
+  t.ns=predict(lm(wage~ns(age,df=n.knots[j]+1,Boundary.knots=c(18,80)),data=Wage[ind!=l,]),newdata=Wage[ind==l,])
+  t.bs=predict(lm(wage~bs(age,df=n.knots[j]+3,Boundary.knots=c(18,80)),data=Wage[ind!=l,]),newdata=Wage[ind==l,])
+  cv.wage[j,]=cv.wage[j,]+c(mean((Wage$wage[ind==l]-t.ns)^2),mean((Wage$wage[ind==l]-t.bs)^2))
+}} 
+cv.wage=cv.wage/l
+par(mfrow=c(1,2)); plot(n.knots,cv.wage[,1],'o',xlab='number of knots',ylab='10 folder cv error',main='natural splines');
+plot(n.knots,cv.wage[,2],xlab='number of knots','o',ylab='10 folder cv error',main='B splines')
+
+#number of knots minimizing 10-folder cv error
+knots.n=n.knots[cv.wage[,1]==min(cv.wage[,1])]
+knots.b=n.knots[cv.wage[,2]==min(cv.wage[,2])]
+
+```
+Using the optimal nubmer of knots, we fit the spline regressions.
+
+```{r}
+#slide 37
+#firstly we sort the age
+f=sort(Wage$age,index=TRUE); Wage=Wage[f$ix,]
+#predict temperatures
+pred.ns=predict(lm(wage~ns(age,df=knots.n+1,Boundary.knots=c(18,80)),data=Wage),newdata=Wage,interval = 'confidence')
+pred.bs=predict(lm(wage~bs(age,df=knots.b+3,Boundary.knots=c(18,80)),data=Wage),newdata=Wage,interval = 'confidence')
+
+par(mfrow=c(1,2)); 
+plot(Wage$age,Wage$wage,main="natural splines",ylim=c(min(Wage$wage)-2,max(Wage$wage)+2),col='grey'); 
+matlines(Wage$age,pred.ns,col=2,lty=c(1,2,2))
+plot(Wage$age,Wage$wage,main="B splines",ylim=c(min(Wage$wage)-2,max(Wage$wage)+2),col='grey'); 
+matlines(Wage$age,pred.bs,col=2,lty=c(1,2,2))
+
+```
+
+We add an indicator variable 'high' that it indicates wage>/250. Then find proportions of highly paid workers given age. 
+```{r}
+Wage=data.frame(Wage,high=as.numeric(Wage$wage>=250))
+v.age=c(18:80); #vector of ages
+p.age=rep(0,length(v.age)); #proportion of wage>=250 given age
+for(i in 1:length(v.age)){p.age[i]=mean(Wage$high[Wage$age==v.age[i]])}
+```
+Using the same number of knots, we fit a logisitic regression. 
+
+```{r}
+#slide 39
+t.ns.prob=predict(glm(high~ns(age,df=knots.n+1,Boundary.knots=c(18,80)),data=Wage,family=binomial(link = "logit")),type = "link", se.fit = TRUE)
+t.bs.prob=predict(glm(high~bs(age,df=knots.b+3,Boundary.knots=c(18,80)),data=Wage,family=binomial(link = "logit")),type = "link", se.fit = TRUE)
+t.prob=predict(glm(high~age,data=Wage,family=binomial(link = "logit")),type = "link", se.fit = TRUE)
+```
+

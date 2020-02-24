@@ -1,0 +1,215 @@
+---
+title: "Useful R Functions for Data Exploration"
+author: "Arden Miller"
+date: "7 March 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Today we are looking at some useful R functions for exploring a data set. This assignment is based on data collated by Amy Moore (a student at Grinnell College) from readily available sources. The data pertains to  North American  passerines (perching birds) and was collected to  investigate relationships between the  characteristics of the different species and the type of nest built.
+
+
+The data used for this assignment consists of the following characteristics for each species:
+
+
+*Length: Mean body length (cm).
+
+*NestType: Type of nest built.
+
+*Location: Location of the nest. Note that  decid means that the nest is in a deciduous tree and conif means that it is in a coniferous tree (the remaining levels are self explanatory).
+
+*Eggs: Average number of eggs.
+
+*Marking:  1 indicates eggs have markings and 0 indicates eggs have no markings.
+
+*Incubate: Mean length of time (in days) the eggs are incubated.
+
+*Nestling: Mean length of time (in days) the babies are cared for in the nest.
+
+*TotalCare: Total care time = Incubate + Nestling.
+
+The data is in a file called  nests.csv We wish to use graphical techniques to explore the relationships between the  variables.
+
+Getting raw data "cleaned" is often very time consuming but it is essential. First we should look at the data file to make sure there are no obvious problems or inconsistencies. Some things to look for are (i) the data is in a consistent form, e.g. a table, (ii) the column separators are consistent, (iii) the symbols used for levels of a factor are consistent, e.g. a factor gender should not use both f and F to denote female (iv) the way missing values are denoted -- in R the symbol NA represents missing values.
+
+Then we import the data:
+```{r}
+nests.df=read.csv("nests.csv")
+```
+
+Now we can take a quick look at the data frame by clicking on nests.df in the upper-right control panel. This allows us to make sure that the data was in fact clean and that we didn't make a silly mistake when importing the data. Also keep an eye open for obvious mistakes and inconsistencies.  
+
+Some other useful functions for getting a first look at the data frame we have created are:
+
+```{r}
+names(nests.df)
+```
+```{r}
+head(nests.df)
+```
+```{r}
+str(nests.df)
+```
+
+One additional thing that we should check is that all of our variables have been assigned the proper class in R. For example, we want Name to be character rather than a  factor and Marking to be a factor rather than an integer. 
+
+```{r}
+nests.df$Name<-as.character(nests.df$Name)
+nests.df$Marking<-factor(nests.df$Marking)
+str(nests.df)
+```
+
+I usually start exploring by looking at the output from summary and a pairs plot.
+```{r}
+summary(nests.df)
+pairs(nests.df[,-1])
+```
+
+
+I found the following issues.
+
+* One of the entries for *NestType* was *Pendant* which I changed to *pendant* to be consistent with the other levels.
+```{r}
+summary(nests.df$NestType)
+```
+```{r}
+nests.df[nests.df=="Pendant"]="pendant"
+summary(nests.df$NestType)
+```
+We should to recreate NestType as a factor to get rid of the extra level.
+```{r}
+nests.df$NestType=factor(nests.df$NestType)
+summary(nests.df$NestType)
+```
+
+* One of the entries for *Location* was *grond* which I changed to *ground* as this clearly was an error.
+
+```{r}
+summary(nests.df$Location)
+nests.df[nests.df=="grond"]="ground"
+nests.df$Location=factor(nests.df$Location)
+summary(nests.df$Location)
+```
+
+* The American Tree Sparrow had a value of *TotalCare* of 215 which is clearly a mistake. I changed it to 21.5 which is the sum of *Incubate* and *Nestling*.
+```{r}
+nests.df[which(nests.df$TotalCare>200),]
+nests.df[68,9]=21.5
+```
+
+* The Rose-Throated Becard had an incubation time of 0 which is clearly not possible. I changed it to an *NA*. I also changed the value of *TotalCare* to *NA* since it would also not be known.
+
+```{r}
+nests.df[which(nests.df$Incubate==0),]
+nests.df[which(nests.df$Incubate==0),c(7,9)]=NA
+```
+
+NestType has seven different categories, some of which have very few observations. One way to deal with this type of situation is to create a new variable with fewer categories. One important feature of a bird nest is whether it is {\em open} (saucer, cup) or {\em closed} (pendant, spherical, cavity, crevice, burrow). 
+To create the new variable, I first created a variable which had all entries as `closed' and then changed those corresponding to `NestType = saucer or cup' to `open'.
+```{r}
+nests.df$OorC="closed"
+nests.df$OorC[nests.df$NestType=="saucer"| nests.df$NestType=="cup"]="open"
+nests.df$OorC=factor(nests.df$OorC)
+head(nests.df)
+summary(nests.df$OorC)
+```
+
+
+
+For the numeric variables we may want to look at some standard plots such as boxplots:
+
+```{r}
+boxplot(nests.df$Length)
+```
+```{r}
+boxplot(nests.df$Incubate)
+```
+
+An alternative to a boxplot is the violin plot:
+
+```{r}
+library(lattice)
+library(violinmplot)
+violinmplot(nests.df$Length)
+```
+
+
+```{r fig.width=8, fig.height=8}
+par(mfrow=c(2,2))
+library(vioplot)
+with(nests.df,vioplot(Length,names="Length",horizontal=TRUE))
+with(nests.df,vioplot(Eggs,names="Number of Eggs",horizontal=TRUE))
+with(nests.df,vioplot(na.omit(Incubate),names="Incubation Time",horizontal=TRUE))
+with(nests.df,vioplot(Nestling,names="Nestling Time",horizontal=TRUE))
+```
+
+
+
+Scatter plots are used to look at the relationship between two numerical variables.
+
+```{r}
+plot(Nestling~Incubate,data=nests.df)
+```
+We can spruce this plot up:
+
+```{r}
+mycol=rgb(0,0,1,alpha=.4)
+plot(Nestling~Incubate,pch=19,col=mycol,xlab="Incubation Time (days)",ylab="Nestling Time (days)",data=nests.df)
+```
+
+
+For a numeric variable and a factor, you can use a series of violin plots given the levels of the factor:
+
+```{r}
+with(nests.df,vioplot(Eggs[OorC=="open"],Eggs[OorC=="closed"],names=c("Open Nest","Closed Nest")))
+```
+
+To look at how variables two factors are related use a mosaic plot:
+
+```{r}
+with(nests.df,mosaicplot(table(OorC,Marking),col=c("red","blue"), main="Mosaic Plot",ylab = "Markings on Eggs",xlab = "Open or Closed Nest"))
+```
+
+
+
+Conditional plots are used to how the relationship between two variables is affected by another variable. Say we wish to explore whether the relationship between incubation time and nestling time is the same forclosed nest and open nest species?
+
+
+```{r}
+mycol=rgb(0,0,1,alpha=.4)
+with(nests.df,coplot(Nestling~Incubate|OorC,pch=19,col=mycol,xlab=c("Incubation Time (days)","Open or Closed Nests"),ylab="Nestling Time (days)"))
+```
+
+There are a few options that allow us to get a 3-D perspective.
+
+```{r}
+library(scatterplot3d)
+scatterplot3d(nests.df[,c(2,7,8)])
+```
+```{r}
+cloud(TotalCare~Nestling*Incubate,data=nests.df)
+```
+
+
+
+## Additional Tasks
+The Petrol Vapour Data consist of 126 observations for 5 variables:
+
+Variable | Explanation | Unit
+-----|-----|-----
+`t.temp` | initial tank temperature | degrees F
+`p.temp` | dispensed petrol temperature | degrees F
+`t.vp` | initial vapour pressure in tank | psi
+`p.vp` | vapour pressure of dispensed petrol | psi
+`hc` | emitted dispensed hydrocarbons (response) | g
+
+1. Down load the Petroleum Vapour Data and create a data frame called vapour.df.
+2. Produce a pairs plot of the variables in this data. What do you learn about the 
+3. Create violin plots for hc and t.vp. What do these plots tell you?
+4. A plot of t.temp versus t.vp conditional on p.temp.
+5. A 3-dimensional scatterplot of t.temp, t.vp and p.temp.
+

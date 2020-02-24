@@ -1,0 +1,79 @@
+Slide 18
+
+cherry.lm <- lm(volume~diameter+height,data=cherry.df)
+par(mfrow=c(1,2))
+plot(cherry.df$height,studres(cherry.lm),pch=19,xlab="height",ylab="studentized residuals",cex.lab=1.4)
+plot(cherry.df$diameter,studres(cherry.lm),pch=19,xlab="diameter",ylab="studentized residuals",cex.lab=1.4)
+
+
+Slide 29
+
+cherryA.lm <- lm(volume~diameter+I(diameter^2)+height,data=cherry.df)
+cherryB.lm <- lm(log(volume)~log(diameter)+log(height),data=cherry.df)
+
+diameter.seq <- seq(8,21,length=30)
+height.seq <- seq(63,87,length=30)
+volumeA.pred <- outer(X=diameter.seq,Y=height.seq,FUN=function(a,b){predict(cherryA.lm,newdata=data.frame(diameter=a,height=b))})
+volumeB.pred <- outer(X=diameter.seq,Y=height.seq,FUN=function(a,b){exp(predict(cherryB.lm,newdata=data.frame(diameter=a,height=b)))})
+jet.colors <- colorRampPalette(c("orange","blue"))
+color <- jet.colors(30)
+zfacet <- volumeA.pred[-1,-1]+volumeA.pred[-1,-30]+volumeA.pred[-30,-1]+volumeA.pred[-30,-30]
+facetcol <- cut(zfacet,30)
+par(mfrow=c(1,2),mar=c(2.1,1.1,1.1,1.1))
+persp(diameter.seq,height.seq,volumeA.pred,theta=-50,col=color[facetcol],zlim=c(5,85),xlab="diameter",ylab="height",zlab="volume",main="Quadratic Model")
+persp(diameter.seq,height.seq,volumeB.pred,theta=-50,col=color[facetcol],zlim=c(5,85),xlab="diameter",ylab="height",zlab="volume",main="Logged Model")
+diameter.seq <- seq(8,21,length=30)
+height.seq <- seq(63,87,length=30)
+volumeA.pred <- outer(X=diameter.seq,Y=height.seq,FUN=function(a,b){predict(cherryA.lm,newdata=data.frame(diameter=a,height=b))})
+volumeB.pred <- outer(X=diameter.seq,Y=height.seq,FUN=function(a,b){exp(predict(cherryB.lm,newdata=data.frame(diameter=a,height=b)))})
+jet.colors <- colorRampPalette(c("orange","blue"))
+color <- jet.colors(30)
+zfacet <- volumeA.pred[-1,-1]+volumeA.pred[-1,-30]+volumeA.pred[-30,-1]+volumeA.pred[-30,-30]
+facetcol <- cut(zfacet,30)
+pdf("cherry_fig8.pdf",width=9,height=4)
+par(mfrow=c(1,2),mar=c(2.1,1.1,1.1,1.1))
+persp(diameter.seq,height.seq,volumeA.pred,theta=-50,col=color[facetcol],zlim=c(5,85),xlab="diameter",ylab="height",zlab="volume",main="Quadratic Model")
+persp(diameter.seq,height.seq,volumeB.pred,theta=-50,col=color[facetcol],zlim=c(5,85),xlab="diameter",ylab="height",zlab="volume",main="Logged Model")
+
+
+Slide 30
+
+filled.contour(diameter.seq,height.seq,volumeA.pred,zlim=c(5,85),nlevels=12,xlab="diameter",ylab="height",cex.lab=1.5,cex.main=1.5,main="Quadratic Model",color.palette = rainbow)
+filled.contour(diameter.seq,height.seq,volumeB.pred,zlim=c(5,85),nlevels=12,xlab="diameter",ylab="height",cex.lab=1.5,cex.main=1.5,main="Logged Model",color.palette = rainbow)
+
+
+Slide 32
+contour(diameter.seq,height.seq,volumeA.pred,zlim=c(5,85),nlevels=12,xlab="diameter",ylab="height",cex.lab=1.5,cex.main=1.5,main="Quadratic Model")
+points(cherry.df$diameter,cherry.df$height,pch=19)
+
+contour(diameter.seq,height.seq,volumeB.pred,zlim=c(5,85),nlevels=12,xlab="diameter",ylab="height",cex.lab=1.5,cex.main=1.5,main="Logged Model")
+points(cherry.df$diameter,cherry.df$height,pch=19)
+
+
+Slide 47
+
+logits<-log((budworm.df$s)/(budworm.df$n -budworm.df$s))
+logits[6]<-log(19.5/.5)
+logits[7]<-log(.5/19.5)
+par(mfrow=c(1,2))
+plot(budworm.df$dose,logits,pch=c(rep("M",6),rep("F",6)),xlab="dose",ylab="logits",cex.lab=1.5)
+plot(log(budworm.df$dose),logits,pch=c(rep("M",6),rep("F",6)),xlab="log(dose)",ylab="logits",cex.lab=1.5)
+
+
+
+Slide 75
+
+mines3B.glm<-glm(COUNT~ INB*EXTRP +  I(EXTRP^2) + AGE,family=poisson,data=mines.df)
+
+INB.seq <- seq(11,900,length=50)
+EXTRP.seq <- seq(50,90,length=50)
+COUNTS.pred <- outer(X=INB.seq,Y=EXTRP.seq,FUN=function(a,b){predict(mines3B.glm,newdata=data.frame(INB=a,EXTRP=b,AGE=7.159),type="response")})
+
+filled.contour(INB.seq,EXTRP.seq,COUNTS.pred,nlevels=20,color.palette = rainbow,xlab="INB",ylab="EXTRP",cex.lab=1.2)
+
+
+Slide 76
+
+contour(INB.seq,EXTRP.seq,COUNTS.pred,nlevels=12,xlab="INB",ylab="EXTRP",labcex=1.5,cex.lab=1.5)
+points(mines.df$INB,mines.df$EXTRP,pch=19)
+

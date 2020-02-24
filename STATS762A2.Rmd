@@ -1,0 +1,437 @@
+---
+title: "STATS 762 Assignment 2"
+author: "Francis Tang, UPI ftan638"
+date: "Due: 11 April 2019"
+output: pdf_document
+---
+
+
+1. The data for this question represent a random sample of 79 patients that underwent a particular type of liver surgery. The response is the survival time time of the patient. Prior to the surgery, data were obtained on four variables that were thought to be possible predictors
+of survival time:
+
+(a) Create a data frame in R. Do an initial assessment of the data and summarize your findings. You are asked to investigate how the four possible predictors are related to survival time. Your ultimate goal is to identify a model that can be used to predict survival times for future patients.
+
+We first import the dataset:
+
+```{r}
+liver.df <- read.csv("~/Desktop/STATS 762/liver.txt", sep="")
+```
+
+```{r}
+str(liver.df)
+```
+
+Let's start with paired plot, which helps us to identify relationships between regressors.
+
+
+```{r}
+# get a summary of each column
+summary(liver.df)
+# get a paired plot
+pairs(liver.df, col = "cadetblue")
+```
+
+Violin plots blow help us know the distribution of each variable.
+
+```{r}
+library(lattice)
+library(violinmplot)
+par(mfrow=c(2,3))
+violinmplot(liver.df$clot, main="blood clotting")
+#title(main="blood clotting")
+violinmplot(liver.df$prog,main="prognostic index")
+#title(main="prognostic index")
+violinmplot(liver.df$enz,main="enzyme function test score")
+#title(main="enzyme function test score")
+violinmplot(liver.df$liv,main="liver function test score")
+#title(main="liver function test score")
+violinmplot(liver.df$time,main="survive time")
+#title(main="survive time")
+```
+
+
+Let's have a look with the Variance Inflation Factors, VIF indicates extensive multicollinearity:
+
+```{r}
+round(diag(solve(cor(liver.df[,1:4]))),2)
+```
+
+The gam plots below shows that prog and enz may need to be lognised to be fit in a model.
+
+```{r}
+library(mgcv)
+liver.gam <- gam(time~s(clot)+s(prog)+s(enz)+s(liv),data = liver.df)
+plot(liver.gam, residuals = T, pages = 1, pch = 20)
+```
+
+
+(b) To start, fit the basic model that uses time as the response and the remaining variables as regressors. Do a full set of diagnostics on this model. Give a brief assessment of this model based on these diagnostics.
+
+We first build a full model and an ANOVA table based on the model:
+
+```{r}
+fit1.lm <- lm(time~., data = liver.df)
+summary(fit1.lm)
+anova(fit1.lm)
+```
+
+It seems like clot, prog and enz are very significant for surviving time. 
+
+```{r}
+par(mfrow=c(2,2))
+plot(fit1.lm)
+```
+
+As this data is ungrouped plots involving residuals are of little value. Plots that we should look at includethe HMD’s, Cook’s Distance and Deviance Changes.The plot for the hat matrix diagonals indicates a few unusually large values.
+
+```{r}
+par(mfrow=c(1,1))
+HMD<-hatvalues(fit1.lm)
+plot(HMD,main="Hat matrix diagonals")
+```
+
+
+```{r}
+liver.df[which(HMD>.1),]
+```
+
+The observations with values greater than 0.1 correspond to individuals that have unusually large values forone or more of the variables that measure the amount of time spent on different activities.Plots for Cook’s Distance and Deviance changes are:
+
+```{r}
+dev.r<-residuals(fit1.lm,type="deviance")
+pear.r<-residuals(fit1.lm,type="pearson")
+Dev.change<-dev.r^2 + pear.r^2*HMD/(1-HMD)
+par(mfrow=c(1,2))
+plot(fit1.lm,which=4,main="Cook's Distance",caption=" ")
+plot(Dev.change,ylab="Deviance change", xlab="Obs. number",type="h", main="Deviance Changes")
+text(Dev.change)
+bigdev=4
+abline(h=bigdev, lty=2)
+```
+
+There are 3 points that stand out as having large values of Cook’s Distance (13, 18 and 75) but they arenot close to the usual cut off of 0.5. There are quite very few points that have values of Deviance Changes of above 8e+04 but given the number of these it doesn’t make sense to consider them as an usual. Point 13 stands out as being the largest on both plots so we might consider the impact of deleting it.
+
+```{r}
+liver.df[13,]
+```
+
+```{r}
+fit2.lm<-lm(time~.,data=liver.df[-13,])
+round(rbind(coefficients(fit1.lm),coefficients(fit2.lm)),3)
+```
+
+It is very curious that after deleted 13, the coefficients decreased for clot, prog and enz. But liv becomes more associated with response.
+
+To check for multicolinearity we need to get the VIF’s:
+
+```{r}
+Xmat<-model.matrix(fit1.lm)[,-1]
+round(diag(solve(cor(Xmat))),2)
+```
+
+These values indicate that there are no strong relationships between the regressors but only liv became more significant. 
+
+
+(c) Now try to find an improved model for this data using the model building cycle described in the lectures. Briefly, outline the steps in your search and present key pieces of evidence. Present the full set of diagnostics for your chosen model and briefly discuss these.
+
+Before perform any kind of transformation, we need to look at the gam plots again to determine which transformation we are supposed to perform in order to achieve better goals for modelling.
+
+```{r}
+liver.gam <- gam(time~s(clot)+s(prog)+s(enz)+s(liv),data = liver.df)
+plot(liver.gam, residuals = T, pages = 1, pch = 20)
+```
+
+The gam plot above shows that clot and liv seem like linear but prog and enz may need to be added a quadratic or logged term? Let's try to add a quadratic term for enz:
+
+```{r}
+liverA.lm <- lm(time~clot+prog+enz+I(enz^2)+liv,data=liver.df)
+summary(liverA.lm)
+```
+
+It is surprisingly interesting to see that I(enz^2) becomes significant!
+
+```{r}
+par(mfrow=c(2,2))
+plot(liverA.lm)
+```
+
+Besides the potential outliers 13 and 75, this model looks like a good fit to the data, but there are still some curves in the plots. Let's try to log(time) this time just like fitting a poissom model:
+
+```{r}
+liverB.lm <- lm(log(time)~clot+prog+enz+liv,data=liver.df)
+summary(liverB.lm)
+```
+
+It looks like clot, prog and enz are all very significant. Let's see the plots below:
+
+```{r}
+par(mfrow=c(2,2))
+plot(liverB.lm)
+```
+
+Besides some potential outliars like 22 and 77, the curve looks very flat and Q-Q plots fits very well to a linear regression. This model may be the best fit so far.
+
+```{r}
+liverB.gam <- gam(log(time)~s(clot)+s(prog)+s(enz)+s(liv),data = liver.df)
+plot(liverB.gam, residuals = T, pages = 1, pch = 20)
+```
+
+The gam plots shows that this model is a very good fit to our data.
+
+Now, let's look at the gam plot for log(time) to check if there's any regressor we can optimise further.
+
+```{r}
+library(mgcv)
+liver1.gam <- gam(log(time)~s(clot)+s(prog)+s(enz)+s(liv),data = liver.df)
+plot(liver1.gam, residuals = T, pages = 1, pch = 20)
+```
+
+The gam plots above show that prog, enz and liv have become almost linear, but clot may need to add a quadratic? 
+
+```{r}
+liverC.lm <- lm(log(time)~I(clot^2)+prog+enz,data=liver.df)
+summary(liverC.lm)
+anova(liverC.lm)
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(liverC.lm)
+```
+
+It looks like this model is the best! The curves become flat and Q-Q is very close to linear. In this case, we will say liverC.lm with log(time) and clot^2 should be a good model to fit.
+
+(d) Use your chosen model to discuss the relationship between survival time and each of the explanatory variables. Some well-chosen plots may be helpful.
+
+We are going to draw coloured contour plots to show the relationships between survival time and clot, prog and enz. Because we can only display two variables at the same time in a plot, we are going to control one variable by set it into the mean value and perform three times.
+
+The first one is how clot and prog influence the time. The relationship may be not linear before clot and prog reaches a certain big point.
+
+```{r}
+clot.seq <- seq(0,20,length=100)
+prog.seq <- seq(5,100,length=100)
+time.pred <- outer(X=clot.seq,Y=prog.seq,
+                   FUN=function(a,b){predict(liverC.lm,newdata=data.frame
+                                             (clot=a,prog=b,
+                                               nz=mean(liver.df$enz)),type="response")})
+filled.contour(clot.seq,prog.seq,time.pred,color.palette = rainbow,
+               xlab="clot",ylab="prog",main="Colored Contour Plot (clot~prog)",cex.lab=1.2)
+```
+
+Very similar situation to clot and prog in this plot.
+
+```{r}
+clot.seq <- seq(0,20,length=100)
+enz.seq <- seq(10,150,length=100)
+time.pred <- outer(X=clot.seq,Y=enz.seq,
+                   FUN=function(a,b){predict(liverC.lm,newdata=data.frame
+                                             (clot=a,enz=b,
+                                               prog=mean(liver.df$prog)),type="response")})
+filled.contour(clot.seq,enz.seq,time.pred,color.palette = rainbow,
+               xlab="clot",ylab="enz",main="Colored Contour Plot (clot~enz)",cex.lab=1.2)
+```
+
+It is very interesting to see that prog and enz have a linear relationship with survival time in the plot below.
+
+```{r}
+prog.seq <- seq(5,100,length=100)
+enz.seq <- seq(10,150,length=100)
+time.pred <- outer(X=prog.seq,Y=enz.seq,
+                   FUN=function(a,b){predict(liverC.lm,newdata=data.frame
+                                             (prog=a,enz=b,
+                                               clot=mean(liver.df$clot)),type="response")})
+filled.contour(prog.seq,enz.seq,time.pred,color.palette = rainbow,
+               xlab="prog",ylab="enz",main="Colored Contour Plot (prog~enz)",cex.lab=1.2)
+```
+
+
+2. The data for this question comes from a study that investigated the effect of insulin on laboratory mice. The response was whether or not the mice had convulsions when given insulin. We are interested in modelling how the proportion of mice with convulsions differs for a new preparation method compared to the standard method.
+
+
+(a) Create a data frame in R that contains the information in the table in a form that is suitable for fitting a logistic regression model for grouped data.
+
+The dataframe is shown below with method a factor, 0 for standard and 1 for new.
+
+```{r}
+method <- c(0,0,0,0,0,0,0,0,0,1,1,1,1,1)
+dose <- c(3.4,5.2,7.0,8.5,10.5,13.0,18.0,21.0,28.0,6.5,10.0,14.0,21.5,29.0)
+conv <- c(0,5,11,14,18,21,23,30,27,2,10,18,21,27)
+total <- c(33,32,38,37,40,37,31,37,30,40,30,40,35,37)
+insulin.df <- data.frame(method, dose, conv, total)
+insulin.df$method <- as.factor(insulin.df$method)
+str(insulin.df)
+```
+
+```{r}
+print(insulin.df)
+```
+
+
+(b) First fit the model that just uses dose and preparation method as regressors. Assess the suitability of this model.
+
+Start fitting with the simple logistic regression:
+
+```{r}
+insulin.glm <- glm(cbind(conv, total-conv)~method+dose, family = binomial, data = insulin.df)
+summary(insulin.glm)
+anova(insulin.glm)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(insulin.glm)
+```
+
+```{r}
+par(mfrow=c(1,1))
+HMD2<-hatvalues(insulin.glm)
+plot(HMD2,main="Hat matrix diagonals")
+```
+
+```{r}
+dev1.r<-residuals(insulin.glm,type="deviance")
+pear1.r<-residuals(insulin.glm,type="pearson")
+Dev1.change<-dev1.r^2 + pear1.r^2*HMD2/(1-HMD2)
+par(mfrow=c(1,2))
+plot(insulin.glm,which=4,main="Cook's Distance",caption=" ")
+plot(Dev1.change,ylab="Deviance change", xlab="Obs. number",type="h", main="Deviance Changes")
+text(Dev1.change)
+bigdev=4
+abline(h=bigdev, lty=2)
+```
+
+```{r}
+1-pchisq(27.098, 11)
+```
+
+The result does not look too bad! Let's plot a graph to see how this model actually fit the predictions:
+
+```{r}
+ds<-seq(1,32,length=200)
+newF.df<-data.frame(method=1,dose=ds)
+newM.df<-data.frame(method=0,dose=ds)
+newF.df$method <- as.factor(newF.df$method)
+newM.df$method <- as.factor(newM.df$method)
+estsF<- predict(insulin.glm,newF.df,type="response")
+estsM<- predict(insulin.glm,newM.df,type="response")
+plot(c(0,32),c(0,1),xlab="dose",
+     ylab="predicted mortality rate",type="n",cex.lab=1.3)
+lines(ds,estsF,lty=1,col="blue",lwd=1.3)
+lines(ds,estsM,lty=2,col="red",lwd=1.3)
+points(insulin.df$dose,insulin.df$conv/total, 
+       pch=c(rep("S",9),rep("N",5)), col=c(rep("red",9),rep("blue",5)))
+legend("bottomright",legend=c("New","Standard"),
+       lty=1:2,col=c("blue","red"),lwd=1.3,cex=1.3)
+```
+
+The fitting was good before does reaches 15, after 15 it's a little bit biased.
+
+(c) Explore the possibility of improving the model. Summarise your model building approach and include key pieces of evidence. Provide a full set of diagnostics for your final model.
+
+Let's try log(dose) first:
+
+```{r}
+loginsulin.glm <- glm(cbind(conv, total-conv)~method+log(dose), family = binomial, data = insulin.df)
+summary(loginsulin.glm)
+anova(loginsulin.glm)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(loginsulin.glm)
+```
+
+```{r}
+1-pchisq(8.7912, 11)
+```
+
+Lack of fit test shows that this model is actually better than the naive model in (b).
+
+Let's try to square dose now see if it improves the result:
+
+```{r}
+insulin2.glm <- glm(cbind(conv, total-conv)~method+I(dose^2), family = binomial, data = insulin.df)
+summary(insulin2.glm)
+anova(insulin2.glm)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(insulin2.glm)
+```
+
+```{r}
+1-pchisq(51.30, 11)
+```
+
+Not at all, dose^2 does not help in this case. How it fits the prediction? The plot below shows that the model cannot fit well to the data.
+
+```{r}
+ds<-seq(1,32,length=200)
+newN.df<-data.frame(method=1,dose=ds)
+newS.df<-data.frame(method=0,dose=ds)
+newN.df$method <- as.factor(newN.df$method)
+newS.df$method <- as.factor(newS.df$method)
+estsN<- predict(insulin2.glm,newN.df,type="response")
+estsS<- predict(insulin2.glm,newS.df,type="response")
+plot(c(0,32),c(0,1),xlab="dose",
+     ylab="predicted mortality rate",type="n",cex.lab=1.3)
+lines(ds,estsN,lty=1,col="blue",lwd=1.3)
+lines(ds,estsS,lty=2,col="red",lwd=1.3)
+points(insulin.df$dose,insulin.df$conv/total, 
+       pch=c(rep("S",9),rep("N",5)), col=c(rep("red",9),rep("blue",5)))
+legend("bottomright",legend=c("New","Standard"),
+       lty=1:2,col=c("blue","red"),lwd=1.3,cex=1.3)
+```
+
+But, how about the interactions? Let's check if there's any?
+
+```{r}
+loginsulinI.glm <- glm(cbind(conv, total-conv)~method*log(dose), family = binomial, data = insulin.df)
+summary(loginsulinI.glm)
+```
+
+```{r}
+anova(loginsulinI.glm, test = "Chisq")
+```
+
+No evidence here that the interaction is needed in the model.
+
+```{r}
+1-pchisq(8.4351, 10)
+```
+
+```{r}
+str(insulin.df)
+```
+
+So now we have a winner! The log(dose) is the best model so far for this case. Let's visualise this model to see how it actually fits:
+
+```{r}
+ds<-seq(1,32,length=200)
+newN.df<-data.frame(method=1,dose=ds)
+newS.df<-data.frame(method=0,dose=ds)
+newN.df$method <- as.factor(newN.df$method)
+newS.df$method <- as.factor(newS.df$method)
+estsN<- predict(loginsulin.glm,newN.df,type="response")
+estsS<- predict(loginsulin.glm,newS.df,type="response")
+plot(c(0,32),c(0,1),xlab="dose",
+     ylab="predicted mortality rate",type="n",cex.lab=1.3)
+lines(ds,estsN,lty=1,col="blue",lwd=1.3)
+lines(ds,estsS,lty=2,col="red",lwd=1.3)
+points(insulin.df$dose,insulin.df$conv/total, 
+       pch=c(rep("S",9),rep("N",5)), col=c(rep("red",9),rep("blue",5)))
+legend("bottomright",legend=c("New","Standard"),
+       lty=1:2,col=c("blue","red"),lwd=1.3,cex=1.3)
+```
+
+
+(d) Use your chosen model to compare the probability of convulsions for the new preparation method to that for the standard method. A suitable plot may be helpful in this regard.
+
+Like the plot we drew above, it actually fits not too bad. before dose reaches 15 the fitting was perfect. It is curious to see that the models starts to cross-fit with the other variable after dose reaches 15. Generally, it is still a good model.
+
+
+
+
+

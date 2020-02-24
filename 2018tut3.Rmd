@@ -1,0 +1,368 @@
+---
+title: "Simulations"
+author: "Arden Miller"
+date: "14`March 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+Today we are going to use simulations to investigate the sampling distributions of the estimated coefficients for ordinary regression when the errors are not Normal and for GLM's. 
+
+First, we will investigate the effect of departures from Normality on the sampling distributions of the estimated coefficients. For these simulations we will consider a situation where the true regression surface is given by
+
+E(Y)= 10 + 5 X1 + 3 X2
+
+We will consider a situation where we have one additional variable (X3) that doesn't have any effect on Y. Our simulated data sets will contain 50 observations.
+
+First we will generate values for our three regressors using the runif command.
+
+```{r}
+X1<-runif(50,10,15)
+X2<-runif(50,20,30)
+X3<-runif(50,5,25)
+```
+
+Now we will calculate the theoretical covariance matrix for this set of X-values. For convenience we always use errors that have variance equal 1.
+
+```{r}
+Xm<-cbind(1,X1,X2,X3)
+mean.vec<-c(10,5,3,0)
+mean.vec
+cov.mat<-solve(t(Xm)%*%Xm)
+cov.mat
+```
+Now we will simulate 500 data sets using errors that are Normal so that we can check our procedure. We create a 
+function that simulates a dataset where the errors really are Normally distributed.
+
+```{r}
+my.fun=function(){
+Y= 10+5* X1 + 3*X2+rnorm(50)
+return(coefficients(lm(Y~X1+X2+X3)))
+}
+```
+
+Then we use the replicate command to run this a whole bunch of times:
+```{r}
+bhats<-replicate(1000,my.fun())
+bhats[,1:5]
+```
+
+Next we will estimate the sampling distribution for each of our fitted coefficients using the density function. We will plot this estimated density (blue lines) and compare it to the theoretical density (orange lines). We will display the plots in a 2 by 2 grid so that we can look at all of them at once.
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+xx<-seq(mean.vec[j]-3*sqrt(cov.mat[j,j]),mean.vec[j]+3*sqrt(cov.mat[j,j]),length=100)
+yy<-dnorm(xx,mean.vec[j],sqrt(cov.mat[j,j]))
+plot(xx,yy,col="orange",type="l",xlab=" ", ylab="density")
+lines(density(bhats[j,]),col="blue")
+abline(h=0)
+}
+```
+
+A better way of assing the Normaility of our sets of estimates is to use a qq-norm plot:
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+qqnorm(bhats[j,])
+}
+```
+Great! The estimated densities are reasonably close to the theoretical ones (if we wanted a better approximation we could increase the number of simulations). So these plots confirm that our simulation procedure is performing as expected (we haven't made a mistake). Further they give us an idea of the variability in our simulations.
+
+Now we will try some simulations where the errors come from distributions that are not Normal. To begin we will look at a t distribution with 3 degrees of freedom. This is a symmetric distribution that has heavier tails than the Normal distribution. The t distribution with 3 dfs has mean=0 and var=3 so to standardize we need to divide by the square root of 3. 3 so to standardize we need to divide by the square root of 3. 3 so to standardize we need to divide by the square root of 3. The following plot compares the densities of these two distributions: 
+
+```{r}
+xx<-seq(-3.5,3.5,length=100)
+yN<-dnorm(xx,mean=0,sd=1)
+xt<-seq(-3.5,3.5,length=100)
+yt<-dt(xt*sqrt(3),3)*sqrt(3)
+plot(xt,yt,col="blue",ylab="density",xlab=" ",type="l")
+lines(xx,yN,col="orange",ylab="density",xlab=" ")
+```
+If we were to put a random sample of size 50 into a QQnorm plot we often see evidence of non-Normality:
+
+```{r}
+qqnorm(rt(50,3)/sqrt(3))
+```
+Now lets repeat our simulations for errors from this t distribution.
+
+```{r}
+my.fun=function(){
+Y= 10+5* X1 + 3*X2+rt(50,3)/sqrt(3)
+return(coefficients(lm(Y~X1+X2+X3)))
+}
+
+bhats<-replicate(1000,my.fun())
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+xx<-seq(mean.vec[j]-3*sqrt(cov.mat[j,j]),mean.vec[j]+3*sqrt(cov.mat[j,j]),length=100)
+yy<-dnorm(xx,mean.vec[j],sqrt(cov.mat[j,j]))
+plot(density(bhats[j,]),col="blue",xlab=" ", ylab="density")
+lines(xx,yy,col="orange")
+abline(h=0)
+}
+```
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+qqnorm(bhats[j,])
+}
+```
+
+
+Now lets try errors from a uniform distribution. To get mean =0 and var=1 we need to use a uniform distribution on the interval (-sqrt(3), +sqrt(3)). This density looks like:
+
+```{r}
+xx<-seq(-3.5,3.5,length=100)
+yN<-dnorm(xx,mean=0,sd=1)
+yU<-dunif(xx,min=-sqrt(3),max=sqrt(3))
+plot(xx,yN,type="l",col="orange",ylab="density",xlab=" ")
+lines(xx,yU,col="blue")
+```
+
+A QQnorm plot for 50 random points from this distribution is:
+
+```{r}
+qqnorm(runif(50,min=-sqrt(3),max=sqrt(3)))
+```
+So running our simulations with uniform errors:
+
+```{r}
+my.fun=function(){
+Y= 10+5* X1 + 3*X2+runif(50,min=-sqrt(3),max=sqrt(3))
+return(coefficients(lm(Y~X1+X2+X3)))
+}
+
+bhats<-replicate(1000,my.fun())
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+xx<-seq(mean.vec[j]-3*sqrt(cov.mat[j,j]),mean.vec[j]+3*sqrt(cov.mat[j,j]),length=100)
+yy<-dnorm(xx,mean.vec[j],sqrt(cov.mat[j,j]))
+plot(density(bhats[j,]),col="blue",xlab=" ", ylab="density")
+lines(xx,yy,col="orange")
+abline(h=0)
+}
+```
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+qqnorm(bhats[j,])
+}
+```
+
+
+
+So let's try a skewed distribution. The Chisquare distribution with 3 df has mean=3 and var=6. So to standardize we subtract the mean and divide by sqrt(6).
+
+```{r}
+xx<-seq(-3.5,5.5,length=100)
+yN<-dnorm(xx,mean=0,sd=1)
+xc<-seq(-3.5,5.5,length=100)
+yc<-dchisq((xc*sqrt(6)+3),3)*sqrt(6)
+plot(xc,yc,col="blue",ylab="density",xlab=" ",type="l")
+lines(xx,yN,col="orange",ylab="density",xlab=" ")
+```
+
+```{r}
+qqnorm((rchisq(50,3)-3)/sqrt(6))
+```
+Run the simulations.
+
+```{r}
+my.fun=function(){
+Y= 10+5* X1 + 3*X2+(rchisq(50,3)-3)/sqrt(6)
+return(coefficients(lm(Y~X1+X2+X3)))
+}
+
+bhats<-replicate(1000,my.fun())
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+xx<-seq(mean.vec[j]-3*sqrt(cov.mat[j,j]),mean.vec[j]+3*sqrt(cov.mat[j,j]),length=100)
+yy<-dnorm(xx,mean.vec[j],sqrt(cov.mat[j,j]))
+plot(density(bhats[j,]),col="blue",xlab=" ", ylab="density")
+lines(xx,yy,col="orange")
+abline(h=0)
+}
+```
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+qqnorm(bhats[j,])
+}
+```
+
+
+
+Let's try the exponential distribution with scale parameter 1. It has mean=1 and var=1 so we just need to subtract 1 to standardize.
+
+```{r}
+xx<-seq(-3.5,5.5,length=100)
+yN<-dnorm(xx,mean=0,sd=1)
+xe<-seq(-3.5,5.5,length=100)
+ye<-dexp(xe+1,1)
+plot(xe,ye,col="blue",ylab="density",xlab=" ",type="l")
+lines(xx,yN,col="orange",ylab="density",xlab=" ")
+```
+
+A quick look at a QQnorm plot.
+
+```{r}
+qqnorm((rexp(50,1)-1))
+```
+
+Run the simulations.
+
+```{r}
+my.fun=function(){
+Y= 10+5* X1 + 3*X2+rexp(50,1)-1
+return(coefficients(lm(Y~X1+X2+X3)))
+}
+
+bhats<-replicate(1000,my.fun())
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+xx<-seq(mean.vec[j]-3*sqrt(cov.mat[j,j]),mean.vec[j]+3*sqrt(cov.mat[j,j]),length=100)
+yy<-dnorm(xx,mean.vec[j],sqrt(cov.mat[j,j]))
+plot(density(bhats[j,]),col="blue",xlab=" ", ylab="density")
+lines(xx,yy,col="orange")
+abline(h=0)
+}
+```
+
+```{r}
+par(mfrow=c(2,2))
+for(j in 1:4){
+qqnorm(bhats[j,])
+}
+```
+
+
+
+Now lets check out the sampling distribution of the fitted coefficients for a glm. Recall the chd data that was analysed using Poisson regression in Lecture Slides 1. 
+
+```{r}
+chd.df<-read.table("chd.data",header=T)
+chd.glm<-glm(chd~age,family=binomial,data=chd.df)
+summary(chd.glm)
+```
+Lets assume that the fitted model is actually the true model and simulate new data sets. For each new data set we will fit the logistic regression model and store the fitted coefficients.
+```{r}
+betas<-coefficients(chd.glm)
+covmat<-summary(chd.glm)$cov.unscaled
+fv<-fitted.values(chd.glm)
+```
+First we create a function that will return the coefficients,
+```{r}
+my.fun=function(){
+Y<-rbinom(length(fv),1,fv)
+new.glm<-glm(Y~chd.df$age,family=binomial)
+return(coefficients(new.glm))
+}
+```
+Now we run the simulations:
+```{r}
+bhats<-replicate(1000,my.fun())
+```
+Finally we compare the empeirical densities for our simulations to the theoretical densities.
+```{r}
+par(mfrow=c(1,2))
+for(j in 1:2){
+xx<-seq(betas[j]-3*sqrt(covmat[j,j]),betas[j]+3*sqrt(covmat[j,j]),length=100)
+yy<-dnorm(xx,betas[j],sqrt(covmat[j,j]))
+plot(xx,yy,col="orange",xlab=" ", type="l",ylab="density")
+lines(density(bhats[j,]),col="blue")
+}
+```
+
+The "qqnorm" plots:
+
+```{r}
+par(mfrow=c(1,2))
+for(j in 1:2){
+qqnorm(bhats[j,])
+}
+```
+
+To check for overdispersion we used the "quasibinomial" model.
+```{r}
+chdQ.glm<-glm(chd~age,family=quasibinomial,data=chd.df)
+summary(chdQ.glm)
+```
+Does this value of the dispersion parameter indicate overdispersion?
+Lets do some simulations:
+```{r}
+my.fun=function(){
+Y<-rbinom(length(fv),1,fv)
+new.glm<-glm(Y~chd.df$age,family=quasibinomial)
+return(summary(new.glm)$dispersion)
+}
+scale.params<-replicate(5000,my.fun())
+```
+Lets look at some summary statistics and find the empirical 95% CI from our simulations.
+```{r}
+summary(scale.params)
+quantile(scale.params,c(.025,.975))
+```
+
+Or we can do a histogram
+```{r}
+par(mfrow=c(1,1))
+hist(scale.params)
+```
+
+Lets do a simulation to check whether the difference between the null deviance and residual deviance follows a chi-square distribution.
+```{r}
+my.fun=function(){
+age.new=sample(chd.df$age)
+new.glm<-glm(chd.df$chd~age.new,family=binomial)
+return(new.glm$null.deviance-new.glm$deviance)
+}
+```
+
+```{r}
+dev.diffs<-replicate(5000,my.fun())
+```
+Lets compare the simulations with the Chisquare distribution.
+```{r}
+xx<-seq(.01,10,length=500)
+yc<-dchisq(xx,1)
+plot(xx,yc,col="orange",type="l")
+lines(density(dev.diffs),col="blue",xlab=" ", ylab="density")
+```
+Lets try a histogram:
+```{r}
+hist(dev.diffs,freq=FALSE)
+lines(xx,yc,col="blue",lwd=1.5)
+```
+A qqplot is even better.
+```{r}
+qqplot(qchisq(ppoints(5000), df = 1),dev.diffs,pch=20)
+```
+
+
+
+

@@ -1,0 +1,187 @@
+---
+title: "Plots of Regression Surfaces"
+author: "Arden Miller"
+date: "27 March 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+
+Today we are going to look at graphical procedures that can be useful in understanding and 
+explaining a fitted regression surface.
+
+To start we will consider producing some of the types of plots used in the last set of Lecture slides. 
+In particular wireframe plots, filled contour plots and contour plots. These are useful for looking at how the fitted response surface depends on levels of two regressors. If we have more than two regressors, we can look at each of the different pairs while fixing the levels of the remaining factors (usually the remaining factors are set to either their median or their mean values). Or we can do a series of plots for two of the regressors while changing the level of a third variable. 
+
+The example we will look features the number of accidents per mine in a three month period in 44 coal mines in West Virginia. The variables are:
+
+COUNT: the number of accidents (response),
+INB: inner burden thickness,
+EXTRP: percentage of coal extracted from mine,
+AHS: the average height of the coal seam in the mine,
+AGE: the age of the mine. 
+
+We will consider the regression surface for the model:
+
+```{r}
+mines.df<-read.table("mines.data",header = TRUE)
+mines3B.glm<-glm(COUNT~ INB*EXTRP + I(EXTRP^2) + AGE,family=poisson,data=mines.df)
+```
+
+## Creating a data grid
+
+To start we need to evaluate our fitted surface over a grid of points for the two regressors INB and EXTRP.
+
+```{r}
+INB.seq <- seq(11,900,length=50)
+EXTRP.seq <- seq(50,90,length=50)
+COUNTS.pred <- outer(X=INB.seq,Y=EXTRP.seq,FUN=function(a,b){predict(mines3B.glm,newdata=data.frame(INB=a,EXTRP=b,AGE=7.159),type="response")})
+```
+
+This has create a 50 x 50 grid of points for INB (ranging from 11 to 900) and EXTRP (ranging from 50 to 90). For each combination of INB and EXTRP, we obtained the predicted value for the response having set AGE= 7.159 (its mean value).
+
+A wireframe plot is created using the persp function. For this plot we can control the orientation using theta (rotation in xy-plane), phi (angle in z-direction) and r (distance of eye is from center of plot). I've also added some axes labels
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+persp(INB.seq, EXTRP.seq, COUNTS.pred, theta=45, phi=15, r=1, xlab="INB", ylab="EXTRP", zlab= "Predicted COUNTS", col="orange",main="A Wireframe Plot")
+```
+
+We can do something fancy like have the colors change with the value of the z-axis.
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+new.colors <- colorRampPalette(c("lightblue","yellow"))
+mycolors <- new.colors(50)
+zfacet <- (COUNTS.pred[-1,-1]+COUNTS.pred[-1,-50]+COUNTS.pred[-50,-1]+COUNTS.pred[-50,-50])/4
+facetcol <- cut(zfacet,50)
+persp(INB.seq,EXTRP.seq,COUNTS.pred,theta=50,phi=15, r=2, col=mycolors[facetcol])
+```
+
+## Contour Plot
+
+Another option for representing our regression surface is a contour plot.
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+contour(INB.seq,EXTRP.seq,COUNTS.pred)
+```
+
+Let's make the line labels larger, the lines wider, label the axes, add a title and  color the lines.
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+contour(INB.seq,EXTRP.seq,COUNTS.pred,xlab="INB",ylab="EXTRP",main="A Contour Plot",labcex=1.2,cex.lab=1.2,col="blue",lwd=1.5)
+```
+We can also add the data points to the plot.
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+contour(INB.seq,EXTRP.seq,COUNTS.pred,xlab="INB",ylab="EXTRP",main="A Contour Plot",labcex=1.2,cex.lab=1.2,col="blue",lwd=1.5)
+points(mines.df$INB,mines.df$EXTRP,pch=19,col="tomato")
+```
+
+Or we can modify the above plot by adding a contour at .01 and plotting the value of COUNT at each point.
+
+```{r, fig.height = 10, fig.width = 10, fig.align = "center"}
+levs<-c(.01,seq(.5,4,by=.5))
+contour(INB.seq,EXTRP.seq,COUNTS.pred,levels=levs,xlab="INB",ylab="EXTRP",main="A Contour Plot",labcex=1.2,cex.lab=1.2,col="blue",lwd=1.5)
+points(jitter(mines.df$INB),jitter(mines.df$EXTRP),pch=as.character(mines.df$COUNT),col="tomato",cex=.8)
+```
+
+## Filled Contour Plot
+
+Another option is the filled contour plot.
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+filled.contour(INB.seq,EXTRP.seq,COUNTS.pred,color.palette = rainbow,xlab="INB",ylab="EXTRP",main="A Colored Contour Plot",cex.lab=1.2)
+```
+We can create a new set of colors to try.
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+new.colors2<-colorRampPalette(c("yellow","orange","red","purple","blue"))
+filled.contour(INB.seq,EXTRP.seq,COUNTS.pred,color.palette = new.colors2,xlab="INB",ylab="EXTRP",main="A Colored Contour Plot",cex.lab=1.2)
+```
+
+We might also try reducing the number of contours (levels).
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+filled.contour(INB.seq,EXTRP.seq,COUNTS.pred,color.palette = rainbow,xlab="INB",ylab="EXTRP",main="A Colored Contour Plot",cex.lab=1.2,nlevels=10)
+```
+
+
+
+It turns out there is a package visreg that make getting these plots a fair bit easier.
+
+```{r}
+library(visreg)
+```
+
+To get a wireframe plot:
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+visreg2d(mines3B.glm, "INB", "EXTRP", plot.type = "persp",scale="response",theta=45,col="red")
+```
+
+Or to get a filled contour plot:
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+visreg2d(mines3B.glm, "INB", "EXTRP", plot.type = "image",scale="response")
+```
+
+We might also want to look at the plots for the other possible pairs of regressors:
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+visreg2d(mines3B.glm, "AGE", "EXTRP", plot.type = "persp",scale="response",theta=45,col="lightblue")
+```
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+visreg2d(mines3B.glm, "INB", "AGE", plot.type = "persp",scale="response",theta=45,col="lightblue")
+```
+
+Or we may want to do a plots for INB and AGE for different values of EXTRP.
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+visreg2d(mines3B.glm, "INB", "AGE", cond=list(EXTRP=65),plot.type = "image",scale="response")
+```
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+visreg2d(mines3B.glm, "INB", "AGE", cond=list(EXTRP=85),plot.type = "image",scale="response")
+```
+
+Oops, the scales have changed so it would be better to set them ourself.
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+levs<-seq(0,4.5,by=.25)
+visreg2d(mines3B.glm, "INB", "AGE", cond=list(EXTRP=65),plot.type = "image",scale="response",levels=levs)
+```
+
+```{r,fig.height = 10, fig.width = 10, fig.align = "center"}
+levs<-seq(0,4.5,by=.25)
+visreg2d(mines3B.glm, "INB", "AGE", cond=list(EXTRP=85),plot.type = "image",scale="response",levels=levs)
+```
+
+
+
+
+## Additional Tasks
+
+One of the standard data sets available in R is called airquality. To access this dataset:
+
+```{r}
+data(airquality)
+summary(airquality)
+```
+
+To make this interesting fit the following rather complicated model:
+
+```{r}
+fit <- lm(Ozone ~ Solar.R + Wind + Temp + I(Wind^2) + I(Temp^2) + I(Wind * Temp) + I(Wind*Temp^2) + I(Temp*Wind^2) + I(Temp^2 * Wind^2), data = airquality)
+```
+
+1. Install the visreg package and use the visreg2d function to create wireframe plots and filled contour plots for each of the possible pairs of regressors.
+
+2.Try creating your own color pallette and use it for the plots you create in 1.
+
+
+

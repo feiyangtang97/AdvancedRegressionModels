@@ -1,0 +1,335 @@
+---
+title: "STATS 762 Assignment 3"
+author: "Francis Tang UPI: ftan638"
+date: "Due: 28/05/2019"
+output: pdf_document
+---
+
+1.
+(a) Find a model to predict the APM for skilled players and displayintercept and coefficients of the model.
+
+We first read data into dataframe and have a look with its variables and only select those we want.
+
+```{r}
+SkillCraftDataset.df <- read.csv("~/Desktop/STATS 762/SkillCraftDataset.csv")
+summary(SkillCraftDataset.df)
+APMData.df <- SkillCraftDataset.df[ ,c(6,7,11,12,13,14,15,17)]
+```
+
+A summary of the extracted dataframe:
+
+```{r}
+summary(APMData.df)
+sapply(APMData.df, typeof)
+```
+
+Paired plot below shows there are several potential linear regressions exist in this dataframe among those regressors.
+
+```{r}
+pairs(APMData.df, col = "cadetblue")
+```
+
+First we try to fit a full model by including all covariates in: 
+
+```{r}
+fit1.lm<-lm(APM~.,data=APMData.df)
+anova(fit1.lm)
+```
+
+```{r}
+summary(fit1.lm)
+```
+
+GapBetweenPACs is not significant according to ANOVA, let's run variable selection tests on AIC and BIC to check which variable we should use:
+
+```{r}
+library(leaps)
+subsets.out<-regsubsets(APM~.,data=APMData.df,nbest=1)
+sso<-summary(subsets.out)
+sso$outmat
+```
+
+```{r}
+my.table<-cbind(sso$outmat,round(sso$cp,2),round(sso$bic,2))
+colnames(my.table)[8:9]<-c("Cp","BIC")
+print.table( my.table)
+```
+
+```{r}
+n<-3395
+p<-20
+aic<-sso$bic-log(n)*p + 2*p
+aicc<-sso$bic-log(n)*p + 2*p + (2*p*(p+1))/(n-p-1)
+print.table(cbind(sso$outmat,round(aic,2),round(aicc,2)))
+```
+
+Basically the result above gave us the idea that we should delete GapBetweenPACs, we fit the model without GapBetweenPACs and the result below is not very promising.
+
+```{r}
+fit2.lm<-lm(log(APM)~SelectByHotkeys+MinimapRightClicks+(NumberOfPACs)+
+              (ActionLatency)+(ActionsInPAC)+WorkersMade,data=APMData.df)
+summary(fit2.lm)
+anova(fit2.lm)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(fit2.lm)
+
+```
+
+AIC & BIC scores are not good either.
+
+```{r}
+logLik(fit2.lm) #log-likelihood
+AIC(fit2.lm) #AIC
+BIC(fit2.lm) #BIC
+```
+
+GAM plots give the same result.
+
+```{r}
+library(mgcv)
+APM.gam <- gam(APM~s(SelectByHotkeys)+s(MinimapRightClicks)+s(log(NumberOfPACs))
+               +s(log(ActionLatency))+s(log(ActionsInPAC))+s(WorkersMade),data = APMData.df)
+plot(APM.gam, residuals = T, pages = 1, pch = 20)
+```
+
+Next, I tried to log some of the variables to see if we can achieve better, the result is a yes.
+
+```{r}
+fit3.lm<-lm(log(APM)~SelectByHotkeys+(MinimapRightClicks)+log(NumberOfPACs)
+            +log(ActionLatency)+log(ActionsInPAC)+log(WorkersMade),data=APMData.df)
+summary(fit3.lm)
+anova(fit3.lm)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(fit3.lm)
+```
+
+```{r}
+logLik(fit3.lm) #log-likelihood
+AIC(fit3.lm) #AIC
+BIC(fit3.lm) #BIC
+```
+
+The model above shows a significant improvement on the AIC and BIC scores. Now let's try to add some interactions inside:
+
+```{r}
+fit4.lm<-lm(log(APM)~SelectByHotkeys + log(NumberOfPACs) + log(ActionsInPAC) 
+            + log(WorkersMade) +  SelectByHotkeys*log(ActionsInPAC) 
+            + log(GapBetweenPACs)*log(NumberOfPACs) + SelectByHotkeys*log(GapBetweenPACs)
+            +SelectByHotkeys*log(NumberOfPACs),data=APMData.df)
+summary(fit4.lm)
+anova(fit4.lm)
+par(mfrow = c(2,2))
+plot(fit4.lm)
+```
+
+```{r}
+logLik(fit4.lm) #log-likelihood
+AIC(fit4.lm) #AIC
+BIC(fit4.lm) #BIC
+```
+
+The result is very good now! So we are going to use this model as our final choice.
+
+```{r}
+fit4.lm
+```
+
+(b)
+
+First, we are going to perform bootstrap and get distribution of the intercept and coefficients of model:
+
+```{r}
+set.seed(762)
+B = 3e3; n = dim(APMData.df)[1]; BootS = matrix(0, B, length(fit4.lm$coefficients))
+b = 0;
+
+
+while(b < B){ y.boot = APMData.df[sample(n, n, replace = TRUE), ]
+f <- lm(log(APM)~SelectByHotkeys + log(NumberOfPACs) + log(ActionsInPAC) + 
+          log(WorkersMade) +  SelectByHotkeys * log(ActionsInPAC) 
+        + log(GapBetweenPACs) * log(NumberOfPACs) + SelectByHotkeys * log(GapBetweenPACs) 
+        + SelectByHotkeys * log(NumberOfPACs),data = y.boot)
+if(sum(is.na(f$coefficients)) == 0){b = b + 1; BootS[b, ] = f$coefficients }
+}
+par(mfrow = c(2,3))
+for(i in 1:5){hist(BootS[ ,i],probability = TRUE,
+                   xlab = names(fit4.lm$coefficients)[i],main = ' ')}
+```
+
+(i)
+
+The 95% CI for intercept and coefficients are list below:
+
+```{r}
+BootsResult = matrix(,length(fit4.lm$coefficients),5);
+rownames(BootsResult) = names(fit4.lm$coefficients)
+colnames(BootsResult) = c('mean','bias','std','5%','95%')
+
+BootsResult[ ,1] = colMeans(BootS)
+BootsResult[ ,2] = colMeans(BootS)-fit4.lm$coefficients
+BootsResult[ ,3] = apply(BootS,2,sd)
+BootsResult[ ,4] = apply(BootS,2,function(x) quantile(x,prob = 0.05))
+BootsResult[ ,5] = apply(BootS,2,function(x) quantile(x,prob = 0.95))
+BootsResult
+```
+
+(ii)
+
+By comparing the numbers from (a) to the 95% CI above, we can conclude that all the result from (a) is agreed with the 95% CI calculated above.
+
+```{r}
+fit4.lm
+```
+
+(c)
+
+We first fit the model then check how many are underestimated:
+
+```{r}
+underestimateRate1 = (sum((exp(predict(fit4.lm, APMData.df)) - 
+                             APMData.df$APM) < 0))/nrow(APMData.df)
+underestimateRate1
+```
+
+We create a function called boots using boostrap mean values, then we can check the underestimate rate:
+
+```{r}
+
+# create a function using the bootstrap mean values
+boots <- function(SelectByHotkeys, NumberOfPACs, 
+                  ActionsInPAC, WorkersMade, GapBetweenPACs){
+  exp(9.870579235 - 91.444776239 * SelectByHotkeys + 1.203950624 * log(NumberOfPACs)
+      + 0.979527218 * log(ActionsInPAC) + 0.006570763 * log(WorkersMade) 
+      - 0.280629108 * log(GapBetweenPACs)
+      - 31.088189502 * SelectByHotkeys * log(ActionsInPAC)
+      - 0.048012261 * log(NumberOfPACs) * log(GapBetweenPACs)
+      - 0.466613577 * SelectByHotkeys * log(GapBetweenPACs)
+      - 32.141086044 * SelectByHotkeys * log(NumberOfPACs))
+}
+
+underestimateRate2 = (sum(boots(APMData.df$SelectByHotkeys, 
+                                APMData.df$NumberOfPACs, APMData.df$ActionsInPAC, 
+                                APMData.df$WorkersMade, APMData.df$GapBetweenPACs) 
+                          - APMData.df$APM) < 0)/nrow(APMData.df)
+underestimateRate2
+
+```
+
+
+2.
+
+(a)
+
+We start with process a proper dataset for modelling:
+
+```{r}
+SkillCraftDataset.df$LeagueIndex = as.numeric(SkillCraftDataset.df$LeagueIndex)
+# delete the useless variables
+q2data <- SkillCraftDataset.df[,-c(1,3,4,5)]
+# detele the rows where LeugueIndex == 7 or 8
+newdf1 <- subset(q2data, !(LeagueIndex == 7))
+new.df <- subset(newdf1, !(LeagueIndex == 8))
+```
+
+Now we start to plot the CV error with respec to lamda values:
+
+```{r}
+library(glmnet); #Ridge and Lasso  
+library(grpreg); #Group lasso
+
+cv.lasso=cv.glmnet(as.matrix(new.df[ ,-1]), as.matrix(new.df[ ,1]), 
+                   alpha = 1, family = "multinomial", parallel = TRUE, 
+                   standardize=TRUE, type.multinomial = "ungrouped")
+plot(cv.lasso)
+#lambda minimizing the cv error
+cv.lasso$lambda.min
+#Min cv error
+cv.lasso$cvm[cv.lasso$lambda==cv.lasso$lambda.min]
+#lambda 1sd - cv error is off by 1sd of the min error
+cv.lasso$lambda.1se
+#cv error off by 1sd of the min er
+cv.lasso$cvm[cv.lasso$lambda==cv.lasso$lambda.1se]
+#Coefficients when lambda.1se
+#coef(cv.lasso,s=cv.lasso$lambda.1se)
+
+```
+
+(b)
+
+According to the result below, level 1 needs 5 variables (except intercept), level 2 needs 7 variables, level 3 needs 6 variables (except intercept), level 4 needs 7 variables (except intercept), levle 5 needs 11 variables (except intercept), level 6 needs 9 variables (except intercept). So:
+
+(i) Level 1 has the smallest number of variables: 5 variables excepr intercept.
+
+(ii) Level 5 has the largest number of variables: 11 variables exceptt intercept.
+
+```{r}
+#Coefficients when lambda.1se
+coef(cv.lasso,s=cv.lasso$lambda.1se)
+```
+
+(c)
+
+We first fit a full multinomial model and use it make predictions:
+
+```{r}
+library(MASS) 
+library(klaR)
+library(nnet)
+library(reshape2)
+library(ggplot2)
+
+#Fit the multinomial regression 
+LeInd.mn <- multinom(LeagueIndex ~ ., new.df)
+LeInd.mn
+#Prediction 
+LeInd.mnpredict <- predict(LeInd.mn, new.df)
+
+#confusion matrix
+table(LeInd.mnpredict,new.df$LeagueIndex)
+```
+
+
+
+```{r results="hide"}
+new.df$LeagueIndex=as.factor(new.df$LeagueIndex)
+#Fit the multinomial regression using stepAIC to select variables
+LeInd.mn.aic <- stepAIC(LeInd.mn, k = 2, trace = TRUE)
+```
+
+```{r}
+LeInd.mn.aic$anova
+```
+
+
+```{r}
+#Prediction 
+LeInd.mnpredict1 <- predict(LeInd.mn.aic,new.df)
+
+#confusion matrix for aic model
+table(LeInd.mnpredict1,new.df$LeagueIndex)
+#confusion matrix for original model
+table(LeInd.mnpredict,new.df$LeagueIndex)
+```
+
+We can see that the AIC model improved the predictions in some ways than the original one.
+
+```{r}
+LeInd.mn.aic$anova
+```
+
+The variables list above in the final model were saved while performing a stepAIC, which means they are useful for predicting levels of expertise: APM + AssignToHotkeys + UniqueHotkeys + MinimapAttacks + GapBetweenPACs + ActionLatency + ActionsInPAC + ComplexUnitsMade.
+
+(d)
+The variables list above in ANOVA table were excluded while performing a stepAIC, which means they are NOT useful for predicting levels of expertise: SelectByHotkeys + UniqueUnitsMade + MinimapRightClicks + TotalMapExplored + NumberOfPACs + ComplexAbilitiesUsed + WorkersMade.
+
+
+
+
+
+
